@@ -1,0 +1,76 @@
+# ==========================================
+# 1. 操作系统与通用缓存 (OS & System files)
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.log
+*.local
+
+# ==========================================
+# 2. Node.js / TypeScript / Web 依赖与编译
+# ==========================================
+node_modules/
+/dist
+/build
+.npm
+.eslintcache
+.stylelintcache
+.turbo
+.vercel
+.output
+.next
+
+# TS / Vite 缓存
+.tsbuildinfo
+.vite/
+.parcel-cache
+
+# ==========================================
+# 3. 环境变量与敏感信息 (安全第一)
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# ==========================================
+# 4. Flutter / Dart 桌面端 (为后续扩充预留)
+# ==========================================
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Flutter 自动生成的平台文件
+/android/.gradle/
+/android/captures/
+/android/app/src/main/res/drawable-*/
+/ios/.symlinks/
+/ios/Pods/
+/ios/DerivedData/
+/linux/flutter/ephemeral/
+/macos/Flutter/ephemeral/
+/windows/flutter/ephemeral/
+
+# ==========================================
+# 5. 编辑器与 IDE (VS Code / JetBrains)
+# ==========================================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

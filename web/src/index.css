@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* 整合你原有的主题色到 Tailwind 中 */
+@theme {
+  --color-claw-text: #6b6375;
+  --color-claw-heading: #08060d;
+  --color-claw-bg: #fff;
+  --color-claw-accent: #aa3bff;
+}
+
+/* 只保留最基础的全局重置，移除限制死宽度的布局 */
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
+}
