@@ -1,0 +1,48 @@
+# ==========================================
+# Cursor 索引忽略 — 减少噪音，聚焦源码
+# ==========================================
+
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物
+dist/
+build/
+.vite/
+.parcel-cache/
+*.tsbuildinfo
+
+# 锁文件（体积大、对理解代码帮助有限）
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Git 内部数据
+.git/
+
+# 二进制与静态资源
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.woff
+*.woff2
+*.mp4
+*.mp3
+
+# 环境变量与密钥
+.env
+.env.*
+
+# 缓存与日志
+.eslintcache
+.stylelintcache
+.turbo
+*.log
+
+# 操作系统
+.DS_Store
+Thumbs.db
