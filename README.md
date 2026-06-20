@@ -11,14 +11,19 @@ OpenClaw 核心功能的精简重写版，沿用相同技术栈：**TypeScript +
 | 包管理 | pnpm workspace | pnpm workspace |
 | 控制面 | WebSocket Gateway | `server/` WebSocket Gateway |
 | 前端 | Control UI / WebChat | `web/` React + Vite |
-| 协议 | connect → req/res/event | 逐步对齐（见路线图） |
+| 协议 | connect → req/res/event | 已对齐 Phase 1（v1） |
 
 ## 项目结构
 
 ```
 mini-openclaw/
-├── server/          # Gateway 微内核（WebSocket 控制面）
-├── web/             # Web 控制台 / WebChat
+├── server/
+│   └── src/
+│       ├── protocol/     # 帧类型 + JSON Schema 校验
+│       └── gateway/      # 连接管理 + RPC 路由
+├── web/
+│   └── src/
+│       └── gateway-client.ts
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -31,13 +36,6 @@ pnpm dev              # 并行启动 Gateway + WebUI
 pnpm dev:server       # 仅 Gateway（端口 8080）
 pnpm dev:web          # 仅 WebUI（Vite 默认 5173）
 ```
-
-## 与 OpenClaw 的差异（刻意精简）
-
-- **不做**：WhatsApp/Telegram/Discord 等消息渠道适配
-- **不做**：macOS/iOS/Android Node 设备层
-- **不做**：Canvas / A2UI / 语音
-- **保留核心**：Gateway 控制面、Agent 循环、工具调用、WebChat
 
 ## 参考
 
