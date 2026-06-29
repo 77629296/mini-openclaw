@@ -9,24 +9,37 @@ interface GatewayInfo {
   ticks: number;
 }
 
+// 提取网络请求的响应接口类型，提升可读性
+interface HealthResponse {
+  uptime: number;
+}
+
+interface StatusResponse {
+  connections: number;
+  protocol: number;
+  gateway: { connId: string; uptime: number };
+}
+
 export default function App() {
   const [status, setStatus] = useState('连接中...');
   const [info, setInfo] = useState<GatewayInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true; // 用于防止异步竞态条件
     const client = new GatewayClient('ws://localhost:8080');
-    let tickTimer: ReturnType<typeof setInterval>;
+    let tickTimer: ReturnType<typeof setInterval> | null = null;
 
-    (async () => {
+    const initGateway = async () => {
       try {
+        // 并发执行无依赖的 health 和 status 请求，缩短连接耗时
         const hello = await client.connect();
-        const health = await client.request<{ uptime: number }>('health');
-        const gatewayStatus = await client.request<{
-          connections: number;
-          protocol: number;
-          gateway: { connId: string; uptime: number };
-        }>('status');
+        const [health, gatewayStatus] = await Promise.all([
+          client.request<HealthResponse>('health'),
+          client.request<StatusResponse>('status'),
+        ]);
+
+        if (!isMounted) return;
 
         setStatus('已握手 (hello-ok)');
         setInfo({
@@ -38,18 +51,22 @@ export default function App() {
         });
 
         tickTimer = setInterval(() => {
-          setInfo((prev) =>
-            prev ? { ...prev, ticks: client.ticks } : prev,
-          );
+          if (isMounted) {
+            setInfo((prev) => (prev ? { ...prev, ticks: client.ticks } : prev));
+          }
         }, 1000);
       } catch (err) {
+        if (!isMounted) return;
         setStatus('连接失败');
-        setError(err instanceof Error ? err.message : String(err));
+        setError(err instanceof Error ? err.message : '未知错误');
       }
-    })();
+    };
+
+    initGateway();
 
     return () => {
-      clearInterval(tickTimer);
+      isMounted = false;
+      if (tickTimer) clearInterval(tickTimer);
       client.disconnect();
     };
   }, []);
@@ -59,13 +76,10 @@ export default function App() {
       <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-6 shadow-xl">
         <h1 className="text-xl font-bold text-emerald-400">Mini-OpenClaw WebUI</h1>
         <p className="mt-2 text-sm text-slate-400">
-          协议状态:{' '}
-          <span className="font-mono text-white">{status}</span>
+          协议状态: <span className="font-mono text-white">{status}</span>
         </p>
 
-        {error && (
-          <p className="mt-2 text-sm text-red-400">{error}</p>
-        )}
+        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
 
         {info && (
           <dl className="mt-4 space-y-2 text-sm">
