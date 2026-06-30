@@ -21,7 +21,9 @@ registerMethod('status', (_params, session) => handleStatus(session));
 const TICK_INTERVAL_MS = 15_000;
 
 function send(ws: WebSocket, frame: ResFrame | EventFrame): void {
-  ws.send(JSON.stringify(frame));
+  if (ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify(frame));
+  }
 }
 
 function closeWithError(ws: WebSocket, code: string, message: string): void {
@@ -29,31 +31,34 @@ function closeWithError(ws: WebSocket, code: string, message: string): void {
   ws.close(1008, message);
 }
 
-function awaitOrSync<T>(value: Promise<T> | T): T {
-  if (value instanceof Promise) {
-    throw new Error('Async method handlers are not yet supported');
-  }
-  return value;
-}
-
 export function handleConnection(ws: WebSocket): void {
   const session = createSession();
   incrementConnections();
   let tickTimer: ReturnType<typeof setInterval> | undefined;
+  let isCleanedUp = false;
 
   console.log(`[Gateway] Client connected (${session.connId})`);
   send(ws, buildConnectChallenge());
 
   const cleanup = () => {
-    if (tickTimer) clearInterval(tickTimer);
+    if (isCleanedUp) return;
+    isCleanedUp = true;
+
+    if (tickTimer) {
+      clearInterval(tickTimer);
+      tickTimer = undefined;
+    }
     decrementConnections();
     console.log(`[Gateway] Client disconnected (${session.connId})`);
   };
 
   ws.on('close', cleanup);
-  ws.on('error', cleanup);
+  ws.on('error', (err) => {
+    console.error(`[Gateway] Connection error on ${session.connId}:`, err);
+    cleanup();
+  });
 
-  ws.on('message', (rawData) => {
+  ws.on('message', async (rawData) => {
     let reqId = 'unknown';
 
     try {
@@ -70,19 +75,26 @@ export function handleConnection(ws: WebSocket): void {
         throw ERR.UNKNOWN_METHOD(frame.method);
       }
 
-      const payload = awaitOrSync(handler(frame.params, session));
+      // 通过 Promise.resolve 兼容同步与异步 handler，移除临时同步断言
+      const payload = await Promise.resolve(handler(frame.params, session));
       send(ws, buildRes(frame.id, true, payload));
 
-      if (frame.method === 'connect' && session.handshakeComplete && !tickTimer) {
+      if (frame.method === 'connect' && session.handshakeComplete) {
+        // 防御恶意或重复的 connect 请求导致定时器泄露
+        if (tickTimer) clearInterval(tickTimer);
+        
         tickTimer = setInterval(() => {
-          if (ws.readyState === ws.OPEN) {
-            send(ws, buildTickEvent(nextEventSeq(session)));
-          }
+          send(ws, buildTickEvent(nextEventSeq(session)));
         }, TICK_INTERVAL_MS);
       }
     } catch (err) {
+      console.error(`[Gateway] Error processing message from ${session.connId}:`, err);
+      
       const protocolErr =
-        err instanceof ProtocolError ? err : ERR.INVALID_FRAME(String(err));
+        err instanceof ProtocolError 
+          ? err 
+          : ERR.INVALID_FRAME(err instanceof Error ? err.message : String(err));
+          
       send(ws, buildRes(reqId, false, protocolErr));
 
       if (
