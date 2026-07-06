@@ -1,4 +1,4 @@
-import type { WebSocket } from 'ws';
+import type { RawData, WebSocket } from 'ws';
 import { parseJsonFrame, assertReqFrame } from '../protocol/schema.js';
 import { ERR, ProtocolError } from '../protocol/errors.js';
 import type { EventFrame, ResFrame } from '../protocol/types.js';
@@ -22,13 +22,23 @@ const TICK_INTERVAL_MS = 15_000;
 
 function send(ws: WebSocket, frame: ResFrame | EventFrame): void {
   if (ws.readyState === ws.OPEN) {
-    ws.send(JSON.stringify(frame));
+    try {
+      ws.send(JSON.stringify(frame));
+    } catch (err) {
+      console.error('[Gateway] Failed to send ws message:', err);
+    }
   }
 }
 
 function closeWithError(ws: WebSocket, code: string, message: string): void {
   console.error(`[Gateway] Closing connection: ${code} — ${message}`);
-  ws.close(1008, message);
+  if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+    try {
+      ws.close(1008, message);
+    } catch (err) {
+      console.error('[Gateway] Failed to close ws connection safely:', err);
+    }
+  }
 }
 
 export function handleConnection(ws: WebSocket): void {
@@ -58,7 +68,7 @@ export function handleConnection(ws: WebSocket): void {
     cleanup();
   });
 
-  ws.on('message', async (rawData) => {
+  ws.on('message', async (rawData: RawData) => {
     let reqId = 'unknown';
 
     try {
@@ -75,16 +85,21 @@ export function handleConnection(ws: WebSocket): void {
         throw ERR.UNKNOWN_METHOD(frame.method);
       }
 
-      // 通过 Promise.resolve 兼容同步与异步 handler，移除临时同步断言
+      // 1. 处理业务逻辑
       const payload = await Promise.resolve(handler(frame.params, session));
+      
+      // 2. 防御异步等待期间连接已释放的竞争情况
+      if (isCleanedUp) return;
+
       send(ws, buildRes(frame.id, true, payload));
 
       if (frame.method === 'connect' && session.handshakeComplete) {
-        // 防御恶意或重复的 connect 请求导致定时器泄露
         if (tickTimer) clearInterval(tickTimer);
         
         tickTimer = setInterval(() => {
-          send(ws, buildTickEvent(nextEventSeq(session)));
+          if (ws.readyState === ws.OPEN) {
+            send(ws, buildTickEvent(nextEventSeq(session)));
+          }
         }, TICK_INTERVAL_MS);
       }
     } catch (err) {
@@ -95,14 +110,18 @@ export function handleConnection(ws: WebSocket): void {
           ? err 
           : ERR.INVALID_FRAME(err instanceof Error ? err.message : String(err));
           
-      send(ws, buildRes(reqId, false, protocolErr));
+      if (!isCleanedUp) {
+        send(ws, buildRes(reqId, false, protocolErr));
+      }
 
-      if (
+      const shouldClose = 
         !session.handshakeComplete ||
         protocolErr.code === 'HANDSHAKE_REQUIRED' ||
-        protocolErr.code === 'INVALID_JSON'
-      ) {
+        protocolErr.code === 'INVALID_JSON';
+
+      if (shouldClose) {
         closeWithError(ws, protocolErr.code, protocolErr.message);
+        cleanup(); // 确保触发本地清理逻辑
       }
     }
   });
