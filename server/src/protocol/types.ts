@@ -64,7 +64,7 @@ export interface HelloOkPayload {
   type: 'hello-ok';
   protocol: number;
   server: { version: string; connId: string };
-  features: { methods: string[]; events: string[] };
+  features: { methods: readonly string[]; events: readonly string[] };
   snapshot: { health: HealthPayload };
   auth: { role: string; scopes: string[] };
   policy: {

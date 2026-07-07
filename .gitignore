@@ -15,7 +15,7 @@ Thumbs.db
 # 2. Node.js / TypeScript / Web 依赖与编译
 # ==========================================
 node_modules/
-/dist
+dist/
 /build
 .npm
 .eslintcache

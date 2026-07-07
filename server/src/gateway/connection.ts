@@ -85,10 +85,10 @@ export function handleConnection(ws: WebSocket): void {
         throw ERR.UNKNOWN_METHOD(frame.method);
       }
 
-      // 1. 处理业务逻辑
+      // Execute the method handler
       const payload = await Promise.resolve(handler(frame.params, session));
       
-      // 2. 防御异步等待期间连接已释放的竞争情况
+      // Guard against connection release during async handler execution
       if (isCleanedUp) return;
 
       send(ws, buildRes(frame.id, true, payload));
@@ -121,7 +121,7 @@ export function handleConnection(ws: WebSocket): void {
 
       if (shouldClose) {
         closeWithError(ws, protocolErr.code, protocolErr.message);
-        cleanup(); // 确保触发本地清理逻辑
+        cleanup(); // Ensure local cleanup is triggered
       }
     }
   });

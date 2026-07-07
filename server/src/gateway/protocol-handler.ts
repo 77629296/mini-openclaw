@@ -21,14 +21,14 @@ const TICK_INTERVAL_MS = 15_000;
 const MAX_PAYLOAD = 65_536;
 const MAX_BUFFERED_BYTES = 131_072;
 
-// 提取静态特性数据，避免每次连接时重复分配数组内存并预防篡改
+// Freeze static feature data to avoid repeated allocations and prevent tampering
 const CONSTANT_FEATURES = Object.freeze({
   methods: Object.freeze([...GATEWAY_METHODS]),
   events: Object.freeze([...GATEWAY_EVENTS]),
 });
 
 /**
- * 恒定时间字符串比较，防止针对 Token 的时序攻击
+ * Constant-time string comparison to prevent timing attacks on tokens
  */
 function safeCompareToken(input: string | undefined, target: string): boolean {
   if (!input) return false;
@@ -52,7 +52,7 @@ export function handleConnect(
   params: unknown,
   session: GatewaySession,
 ): HelloOkPayload {
-  // 假设 assertConnectParams 已具备类型守卫能力，移除多余的 'as' 强制转换
+  // assertConnectParams already acts as a type guard, no need for extra 'as' cast
   assertConnectParams(params);
   const connectParams = params as ConnectParams;
 
@@ -64,7 +64,7 @@ export function handleConnect(
   }
 
   const envToken = process.env.OPENCLAW_GATEWAY_TOKEN;
-  // 安全漏洞修复：使用安全的比较函数替代默认的严格全等
+  // Use safe comparison to prevent timing attacks instead of strict equality
   if (envToken && !safeCompareToken(connectParams.auth?.token, envToken)) {
     throw ERR.AUTH_FAILED();
   }

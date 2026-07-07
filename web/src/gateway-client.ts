@@ -38,38 +38,41 @@ type PendingRequest = {
 };
 
 function randomId(): string {
-  return crypto.randomUUID();
+  return globalThis.crypto.randomUUID();
 }
 
 export class GatewayClient {
-  private ws: WebSocket | null = null;
-  private pending = new Map<string, PendingRequest>();
-  private connected = false;
-  private hello: HelloOkPayload | null = null;
-  private tickCount = 0;
+  #ws: WebSocket | null = null;
+  #pending = new Map<string, PendingRequest>();
+  #connected = false;
+  #hello: HelloOkPayload | null = null;
+  #tickCount = 0;
+  readonly #url: string;
 
-  constructor(private readonly url: string) {}
+  constructor(url: string) {
+    this.#url = url;
+  }
 
   get isConnected(): boolean {
-    return this.connected;
+    return this.#connected;
   }
 
   get helloOk(): HelloOkPayload | null {
-    return this.hello;
+    return this.#hello;
   }
 
   get ticks(): number {
-    return this.tickCount;
+    return this.#tickCount;
   }
 
   async connect(): Promise<HelloOkPayload> {
-    if (this.ws) {
-      this.ws.close();
+    if (this.#ws) {
+      this.#ws.close();
     }
 
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.url);
-      this.ws = ws;
+      const ws = new WebSocket(this.#url);
+      this.#ws = ws;
       let challengeReceived = false;
 
       ws.onopen = () => {
@@ -82,7 +85,7 @@ export class GatewayClient {
         if (frame.type === 'event') {
           if (frame.event === 'connect.challenge' && !challengeReceived) {
             challengeReceived = true;
-            this.sendReq('connect', {
+            this.#sendReq('connect', {
               minProtocol: 1,
               maxProtocol: 1,
               client: {
@@ -99,20 +102,20 @@ export class GatewayClient {
                 reject(new Error(res.error?.message ?? 'connect failed'));
                 return;
               }
-              this.hello = res.payload as HelloOkPayload;
-              this.connected = true;
-              resolve(this.hello);
+              this.#hello = res.payload as HelloOkPayload;
+              this.#connected = true;
+              resolve(this.#hello);
             }).catch(reject);
           } else if (frame.event === 'tick') {
-            this.tickCount += 1;
+            this.#tickCount += 1;
           }
           return;
         }
 
         if (frame.type === 'res') {
-          const pending = this.pending.get(frame.id);
+          const pending = this.#pending.get(frame.id);
           if (pending) {
-            this.pending.delete(frame.id);
+            this.#pending.delete(frame.id);
             pending.resolve(frame);
           }
         }
@@ -120,14 +123,14 @@ export class GatewayClient {
 
       ws.onerror = () => reject(new Error('WebSocket error'));
       ws.onclose = () => {
-        this.connected = false;
-        this.hello = null;
+        this.#connected = false;
+        this.#hello = null;
       };
     });
   }
 
   async request<T = unknown>(method: string, params?: unknown): Promise<T> {
-    const res = await this.sendReq(method, params);
+    const res = await this.#sendReq(method, params);
     if (!res.ok) {
       throw new Error(res.error?.message ?? `${method} failed`);
     }
@@ -135,14 +138,14 @@ export class GatewayClient {
   }
 
   disconnect(): void {
-    this.ws?.close();
-    this.ws = null;
-    this.connected = false;
-    this.hello = null;
+    this.#ws?.close();
+    this.#ws = null;
+    this.#connected = false;
+    this.#hello = null;
   }
 
-  private sendReq(method: string, params?: unknown): Promise<ResFrame> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+  #sendReq(method: string, params?: unknown): Promise<ResFrame> {
+    if (!this.#ws || this.#ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error('WebSocket not open'));
     }
 
@@ -150,12 +153,12 @@ export class GatewayClient {
     const frame: ReqFrame = { type: 'req', id, method, params };
 
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.ws!.send(JSON.stringify(frame));
+      this.#pending.set(id, { resolve, reject });
+      this.#ws!.send(JSON.stringify(frame));
 
       setTimeout(() => {
-        if (this.pending.has(id)) {
-          this.pending.delete(id);
+        if (this.#pending.has(id)) {
+          this.#pending.delete(id);
           reject(new Error(`Request timeout: ${method}`));
         }
       }, 10_000);
