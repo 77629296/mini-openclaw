@@ -9,6 +9,7 @@ import {
   type HelloOkPayload,
   type ResFrame,
   type StatusPayload,
+  type WhoamiPayload,
 } from '../protocol/types.js';
 import { ERR, ProtocolError } from '../protocol/errors.js';
 import { assertConnectParams } from '../protocol/schema.js';
@@ -118,6 +119,17 @@ export function buildTickEvent(seq: number): EventFrame {
     event: 'tick',
     payload: { ts: Date.now() },
     seq,
+  };
+}
+
+export function handleWhoami(_params: unknown, session: GatewaySession): WhoamiPayload {
+  return {
+    connId: session.connId,
+    role: session.role,
+    scopes: session.scopes,
+    ...(session.client ? { client: session.client } : {}),
+    protocol: PROTOCOL_VERSION,
+    connectedAt: session.connectedAt,
   };
 }
 

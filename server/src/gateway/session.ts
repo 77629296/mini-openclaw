@@ -8,6 +8,7 @@ export interface GatewaySession {
   scopes: string[];
   client?: ConnectClientInfo;
   eventSeq: number;
+  connectedAt: number;
 }
 
 export function createSession(): GatewaySession {
@@ -17,6 +18,7 @@ export function createSession(): GatewaySession {
     role: 'operator',
     scopes: [],
     eventSeq: 0,
+    connectedAt: Date.now(),
   };
 }
 

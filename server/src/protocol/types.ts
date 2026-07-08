@@ -2,7 +2,7 @@
 
 export const PROTOCOL_VERSION = 1;
 
-export const GATEWAY_METHODS = ['connect', 'health', 'status'] as const;
+export const GATEWAY_METHODS = ['connect', 'health', 'status', 'whoami'] as const;
 export const GATEWAY_EVENTS = ['connect.challenge', 'tick'] as const;
 
 export type GatewayMethod = (typeof GATEWAY_METHODS)[number];
@@ -90,4 +90,13 @@ export interface StatusPayload {
   protocol: number;
   role: string;
   scopes: string[];
+}
+
+export interface WhoamiPayload {
+  connId: string;
+  role: 'operator' | 'node';
+  scopes: string[];
+  client?: ConnectClientInfo;
+  protocol: number;
+  connectedAt: number;
 }

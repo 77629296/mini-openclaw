@@ -9,6 +9,7 @@ import {
   handleConnect,
   handleHealth,
   handleStatus,
+  handleWhoami,
 } from './protocol-handler.js';
 import { createSession, nextEventSeq } from './session.js';
 import { getMethodHandler, registerMethod } from './router.js';
@@ -17,6 +18,7 @@ import { incrementConnections, decrementConnections } from './state.js';
 registerMethod('connect', handleConnect);
 registerMethod('health', () => handleHealth());
 registerMethod('status', (_params, session) => handleStatus(session));
+registerMethod('whoami', handleWhoami);
 
 const TICK_INTERVAL_MS = 15_000;
 
