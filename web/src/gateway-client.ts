@@ -48,9 +48,14 @@ export class GatewayClient {
   #hello: HelloOkPayload | null = null;
   #tickCount = 0;
   readonly #url: string;
+  #onDisconnectCallback: (() => void) | null = null;
 
   constructor(url: string) {
     this.#url = url;
+  }
+
+  onDisconnect(callback: () => void): void {
+    this.#onDisconnectCallback = callback;
   }
 
   get isConnected(): boolean {
@@ -125,6 +130,7 @@ export class GatewayClient {
       ws.onclose = () => {
         this.#connected = false;
         this.#hello = null;
+        this.#onDisconnectCallback?.();
       };
     });
   }

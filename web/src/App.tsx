@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { GatewayClient } from './gateway-client';
+
+const WS_URL =
+  (import.meta as unknown as { env?: Record<string, string> }).env
+    ?.VITE_GATEWAY_WS_URL ?? 'ws://localhost:8080';
 
 interface GatewayInfo {
   connId: string;
@@ -7,9 +11,10 @@ interface GatewayInfo {
   uptime: number;
   connections: number;
   ticks: number;
+  role: string;
+  scopes: string[];
 }
 
-// 提取网络请求的响应接口类型，提升可读性
 interface HealthResponse {
   uptime: number;
 }
@@ -20,56 +25,104 @@ interface StatusResponse {
   gateway: { connId: string; uptime: number };
 }
 
+interface WhoamiResponse {
+  connId: string;
+  role: 'operator' | 'node';
+  scopes: string[];
+  protocol: number;
+  connectedAt: number;
+}
+
+const RECONNECT_DELAY_MS = 3_000;
+const MAX_RECONNECT_ATTEMPTS = 10;
+
 export default function App() {
   const [status, setStatus] = useState('连接中...');
   const [info, setInfo] = useState<GatewayInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+
+  const initGateway = useCallback(async (client: GatewayClient) => {
+    try {
+      const hello = await client.connect();
+      const [health, gatewayStatus, whoami] = await Promise.all([
+        client.request<HealthResponse>('health'),
+        client.request<StatusResponse>('status'),
+        client.request<WhoamiResponse>('whoami'),
+      ]);
+
+      reconnectAttemptsRef.current = 0;
+      setStatus('已握手 (hello-ok)');
+      setInfo({
+        connId: whoami.connId,
+        protocol: whoami.protocol,
+        uptime: health.uptime,
+        connections: gatewayStatus.connections,
+        ticks: client.ticks,
+        role: whoami.role,
+        scopes: whoami.scopes,
+      });
+      setError(null);
+    } catch (err) {
+      setStatus('连接失败');
+      setError(err instanceof Error ? err.message : '未知错误');
+    }
+  }, []);
 
   useEffect(() => {
-    let isMounted = true; // 用于防止异步竞态条件
-    const client = new GatewayClient('ws://localhost:8080');
+    let isMounted = true;
+    const client = new GatewayClient(WS_URL);
     let tickTimer: ReturnType<typeof setInterval> | null = null;
 
-    const initGateway = async () => {
-      try {
-        // 并发执行无依赖的 health 和 status 请求，缩短连接耗时
-        const hello = await client.connect();
-        const [health, gatewayStatus] = await Promise.all([
-          client.request<HealthResponse>('health'),
-          client.request<StatusResponse>('status'),
-        ]);
+    client.onDisconnect(() => {
+      if (!isMounted) return;
+      clearInterval(tickTimer);
+      tickTimer = null;
 
-        if (!isMounted) return;
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttemptsRef.current += 1;
+        setStatus(
+          `连接断开，${RECONNECT_DELAY_MS / 1000}s 后重连 (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`,
+        );
+        setTimeout(() => {
+          if (isMounted) {
+            initGateway(client).then(() => {
+              if (isMounted && client.isConnected) {
+                tickTimer = setInterval(() => {
+                  if (isMounted) {
+                    setInfo((prev) =>
+                      prev ? { ...prev, ticks: client.ticks } : prev,
+                    );
+                  }
+                }, 1000);
+              }
+            });
+          }
+        }, RECONNECT_DELAY_MS);
+      } else {
+        setStatus('连接失败（已达最大重试次数）');
+        setError('无法连接到 Gateway');
+      }
+    });
 
-        setStatus('已握手 (hello-ok)');
-        setInfo({
-          connId: hello.server.connId,
-          protocol: hello.protocol,
-          uptime: health.uptime,
-          connections: gatewayStatus.connections,
-          ticks: client.ticks,
-        });
-
+    initGateway(client).then(() => {
+      if (isMounted && client.isConnected) {
         tickTimer = setInterval(() => {
           if (isMounted) {
-            setInfo((prev) => (prev ? { ...prev, ticks: client.ticks } : prev));
+            setInfo((prev) =>
+              prev ? { ...prev, ticks: client.ticks } : prev,
+            );
           }
         }, 1000);
-      } catch (err) {
-        if (!isMounted) return;
-        setStatus('连接失败');
-        setError(err instanceof Error ? err.message : '未知错误');
       }
-    };
-
-    initGateway();
+    });
 
     return () => {
       isMounted = false;
       if (tickTimer) clearInterval(tickTimer);
       client.disconnect();
     };
-  }, []);
+  }, [initGateway]);
 
   return (
     <div className="flex h-screen items-center justify-center bg-slate-900 text-white">
@@ -90,6 +143,14 @@ export default function App() {
             <div className="flex justify-between">
               <dt className="text-slate-400">protocol</dt>
               <dd className="font-mono">v{info.protocol}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-400">role</dt>
+              <dd className="font-mono">{info.role}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-400">scopes</dt>
+              <dd className="font-mono text-xs">{info.scopes.join(', ')}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-slate-400">uptime</dt>
