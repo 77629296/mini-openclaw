@@ -7,18 +7,25 @@ import {
   buildRes,
   buildTickEvent,
   handleConnect,
+  handleEcho,
   handleHealth,
+  handlePing,
+  handleSessions,
   handleStatus,
   handleWhoami,
 } from './protocol-handler.js';
 import { createSession, nextEventSeq } from './session.js';
 import { getMethodHandler, registerMethod } from './router.js';
 import { incrementConnections, decrementConnections } from './state.js';
+import { registerSession, unregisterSession } from './session-registry.js';
 
 registerMethod('connect', handleConnect);
 registerMethod('health', () => handleHealth());
 registerMethod('status', (_params, session) => handleStatus(session));
 registerMethod('whoami', handleWhoami);
+registerMethod('system.ping', handlePing);
+registerMethod('system.echo', handleEcho);
+registerMethod('system.sessions', () => handleSessions());
 
 const TICK_INTERVAL_MS = 15_000;
 
@@ -60,6 +67,7 @@ export function handleConnection(ws: WebSocket): void {
       clearInterval(tickTimer);
       tickTimer = undefined;
     }
+    unregisterSession(session.connId);
     decrementConnections();
     console.log(`[Gateway] Client disconnected (${session.connId})`);
   };
@@ -96,6 +104,7 @@ export function handleConnection(ws: WebSocket): void {
       send(ws, buildRes(frame.id, true, payload));
 
       if (frame.method === 'connect' && session.handshakeComplete) {
+        registerSession(session);
         if (tickTimer) clearInterval(tickTimer);
         
         tickTimer = setInterval(() => {

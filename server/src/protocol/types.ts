@@ -2,8 +2,16 @@
 
 export const PROTOCOL_VERSION = 1;
 
-export const GATEWAY_METHODS = ['connect', 'health', 'status', 'whoami'] as const;
-export const GATEWAY_EVENTS = ['connect.challenge', 'tick'] as const;
+export const GATEWAY_METHODS = [
+  'connect',
+  'health',
+  'status',
+  'whoami',
+  'system.ping',
+  'system.echo',
+  'system.sessions',
+] as const;
+export const GATEWAY_EVENTS = ['connect.challenge', 'tick', 'system.log'] as const;
 
 export type GatewayMethod = (typeof GATEWAY_METHODS)[number];
 export type GatewayEvent = (typeof GATEWAY_EVENTS)[number];
@@ -99,4 +107,45 @@ export interface WhoamiPayload {
   client?: ConnectClientInfo;
   protocol: number;
   connectedAt: number;
+}
+
+// --- system.* payloads ---
+
+export interface PingPayload {
+  pong: true;
+  ts: number;
+  echo?: string;
+}
+
+export interface EchoParams {
+  message: string;
+}
+
+export interface EchoPayload {
+  message: string;
+  length: number;
+  reverse: string;
+}
+
+export interface SessionsListEntry {
+  connId: string;
+  role: string;
+  scopes: string[];
+  connectedAt: number;
+}
+
+export interface SessionsPayload {
+  count: number;
+  sessions: SessionsListEntry[];
+}
+
+export interface SystemLogEvent {
+  type: 'event';
+  event: 'system.log';
+  payload: {
+    level: 'info' | 'warn' | 'error';
+    message: string;
+    source?: string;
+    ts: number;
+  };
 }

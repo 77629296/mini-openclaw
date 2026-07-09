@@ -32,6 +32,14 @@ export interface HelloOkPayload {
   policy: { tickIntervalMs: number };
 }
 
+/** A captured event entry for the UI event log */
+export interface LoggedEvent {
+  id: number;
+  ts: number;
+  event: string;
+  payload: unknown;
+}
+
 type PendingRequest = {
   resolve: (frame: ResFrame) => void;
   reject: (err: Error) => void;
@@ -49,6 +57,7 @@ export class GatewayClient {
   #tickCount = 0;
   readonly #url: string;
   #onDisconnectCallback: (() => void) | null = null;
+  #onEventCallback: ((evt: LoggedEvent) => void) | null = null;
 
   constructor(url: string) {
     this.#url = url;
@@ -56,6 +65,10 @@ export class GatewayClient {
 
   onDisconnect(callback: () => void): void {
     this.#onDisconnectCallback = callback;
+  }
+
+  onEvent(callback: (evt: LoggedEvent) => void): void {
+    this.#onEventCallback = callback;
   }
 
   get isConnected(): boolean {
@@ -88,6 +101,14 @@ export class GatewayClient {
         const frame = JSON.parse(ev.data as string) as ResFrame | EventFrame;
 
         if (frame.type === 'event') {
+          // Log every incoming event
+          this.#onEventCallback?.({
+            id: this.#tickCount + Date.now(),
+            ts: Date.now(),
+            event: frame.event,
+            payload: frame.payload,
+          });
+
           if (frame.event === 'connect.challenge' && !challengeReceived) {
             challengeReceived = true;
             this.#sendReq('connect', {

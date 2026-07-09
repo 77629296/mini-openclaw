@@ -4,11 +4,15 @@ import {
   GATEWAY_METHODS,
   PROTOCOL_VERSION,
   type ConnectParams,
+  type EchoPayload,
   type EventFrame,
   type HealthPayload,
   type HelloOkPayload,
+  type PingPayload,
   type ResFrame,
+  type SessionsPayload,
   type StatusPayload,
+  type SystemLogEvent,
   type WhoamiPayload,
 } from '../protocol/types.js';
 import { ERR, ProtocolError } from '../protocol/errors.js';
@@ -16,6 +20,7 @@ import { assertConnectParams } from '../protocol/schema.js';
 import type { GatewaySession } from './session.js';
 import { applyConnect } from './session.js';
 import { getConnectionCount, getUptime } from './state.js';
+import { listSessions, getActiveSessionCount } from './session-registry.js';
 
 const SERVER_VERSION = '0.1.0';
 const TICK_INTERVAL_MS = 15_000;
@@ -150,4 +155,55 @@ export function buildRes(
       : ERR.INVALID_FRAME(payloadOrError instanceof Error ? payloadOrError.message : String(payloadOrError));
       
   return { type: 'res', id, ok: false, error: err.toResError() };
+}
+
+// --- system.* handlers ---
+
+export function handlePing(params: unknown): PingPayload {
+  const input = params as { echo?: string } | undefined;
+  return {
+    pong: true,
+    ts: Date.now(),
+    ...(input?.echo ? { echo: input.echo } : {}),
+  };
+}
+
+export function handleEcho(params: unknown): EchoPayload {
+  if (!params || typeof params !== 'object' || !('message' in (params as Record<string, unknown>))) {
+    throw ERR.INVALID_FRAME('Echo requires a "message" parameter');
+  }
+  const { message } = params as { message: string };
+  if (typeof message !== 'string') {
+    throw ERR.INVALID_FRAME('Echo "message" must be a string');
+  }
+  return {
+    message,
+    length: message.length,
+    reverse: message.split('').reverse().join(''),
+  };
+}
+
+export function handleSessions(): SessionsPayload {
+  return {
+    count: getActiveSessionCount(),
+    sessions: listSessions(),
+  };
+}
+
+export function buildSystemLogEvent(
+  level: SystemLogEvent['payload']['level'],
+  message: string,
+  source?: string,
+): SystemLogEvent {
+  const payload: SystemLogEvent['payload'] = {
+    level,
+    message,
+    ts: Date.now(),
+    ...(source !== undefined ? { source } : {}),
+  };
+  return {
+    type: 'event',
+    event: 'system.log',
+    payload,
+  };
 }
