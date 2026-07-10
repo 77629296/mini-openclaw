@@ -10,6 +10,10 @@ export const GATEWAY_METHODS = [
   'system.ping',
   'system.echo',
   'system.sessions',
+  'node.register',
+  'node.list',
+  'node.status',
+  'node.update-status',
 ] as const;
 export const GATEWAY_EVENTS = ['connect.challenge', 'tick', 'system.log'] as const;
 
@@ -148,4 +152,46 @@ export interface SystemLogEvent {
     source?: string;
     ts: number;
   };
+}
+
+// --- node management types ---
+
+export interface NodeInfo {
+  connId: string;
+  name: string;
+  version: string;
+  platform: string;
+  capabilities: string[];
+  status: 'online' | 'busy' | 'offline';
+  lastSeen: number;
+  connectedAt: number;
+}
+
+export interface RegisterNodeParams {
+  name: string;
+  version: string;
+  platform: string;
+  capabilities?: string[];
+}
+
+export interface RegisterNodePayload {
+  ok: boolean;
+  node: NodeInfo;
+}
+
+export interface ListNodesPayload {
+  count: number;
+  nodes: NodeInfo[];
+}
+
+export interface NodeStatusParams {
+  connId: string;
+}
+
+export interface NodeStatusPayload {
+  node: NodeInfo | null;
+}
+
+export interface UpdateNodeStatusParams {
+  status: 'online' | 'busy' | 'offline';
 }

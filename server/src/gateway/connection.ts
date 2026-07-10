@@ -9,9 +9,13 @@ import {
   handleConnect,
   handleEcho,
   handleHealth,
+  handleListNode,
+  handleNodeStatus,
   handlePing,
+  handleRegisterNode,
   handleSessions,
   handleStatus,
+  handleUpdateNodeStatus,
   handleWhoami,
 } from './protocol-handler.js';
 import { createSession, nextEventSeq } from './session.js';
@@ -26,6 +30,10 @@ registerMethod('whoami', handleWhoami);
 registerMethod('system.ping', handlePing);
 registerMethod('system.echo', handleEcho);
 registerMethod('system.sessions', () => handleSessions());
+registerMethod('node.register', handleRegisterNode);
+registerMethod('node.list', () => handleListNode());
+registerMethod('node.status', handleNodeStatus);
+registerMethod('node.update-status', handleUpdateNodeStatus);
 
 const TICK_INTERVAL_MS = 15_000;
 

@@ -8,11 +8,18 @@ import {
   type EventFrame,
   type HealthPayload,
   type HelloOkPayload,
+  type ListNodesPayload,
+  type NodeInfo,
+  type NodeStatusParams,
+  type NodeStatusPayload,
   type PingPayload,
+  type RegisterNodeParams,
+  type RegisterNodePayload,
   type ResFrame,
   type SessionsPayload,
   type StatusPayload,
   type SystemLogEvent,
+  type UpdateNodeStatusParams,
   type WhoamiPayload,
 } from '../protocol/types.js';
 import { ERR, ProtocolError } from '../protocol/errors.js';
@@ -21,6 +28,16 @@ import type { GatewaySession } from './session.js';
 import { applyConnect } from './session.js';
 import { getConnectionCount, getUptime } from './state.js';
 import { listSessions, getActiveSessionCount } from './session-registry.js';
+import {
+  registerNode,
+  unregisterNode,
+  getNode,
+  listNodes,
+  getOnlineNodes,
+  getNodeCount,
+  updateNodeStatus,
+  touchNode,
+} from './node-registry.js';
 
 const SERVER_VERSION = '0.1.0';
 const TICK_INTERVAL_MS = 15_000;
@@ -205,5 +222,75 @@ export function buildSystemLogEvent(
     type: 'event',
     event: 'system.log',
     payload,
+  };
+}
+
+// --- node management handlers ---
+
+export function handleRegisterNode(
+  params: unknown,
+  session: GatewaySession,
+): RegisterNodePayload {
+  if (!params || typeof params !== 'object') {
+    throw ERR.INVALID_FRAME('registerNode requires params');
+  }
+  const { name, version, platform, capabilities } = params as RegisterNodeParams;
+
+  if (!name || typeof name !== 'string') {
+    throw ERR.INVALID_FRAME('registerNode requires a name');
+  }
+  if (!version || typeof version !== 'string') {
+    throw ERR.INVALID_FRAME('registerNode requires a version');
+  }
+  if (!platform || typeof platform !== 'string') {
+    throw ERR.INVALID_FRAME('registerNode requires a platform');
+  }
+
+  const node = registerNode(
+    session,
+    name,
+    version,
+    platform,
+    Array.isArray(capabilities) ? capabilities : []
+  );
+
+  return { ok: true, node };
+}
+
+export function handleListNode(): ListNodesPayload {
+  const nodes = listNodes();
+  return {
+    count: getNodeCount(),
+    nodes,
+  };
+}
+
+export function handleNodeStatus(params: unknown): NodeStatusPayload {
+  if (!params || typeof params !== 'object' || !('connId' in params)) {
+    throw ERR.INVALID_FRAME('node.status requires connId');
+  }
+  const { connId } = params as NodeStatusParams;
+  const node = getNode(connId) ?? null;
+  return { node };
+}
+
+export function handleUpdateNodeStatus(
+  params: unknown,
+  session: GatewaySession,
+): { ok: boolean; node: NodeInfo | null } {
+  if (!params || typeof params !== 'object' || !('status' in params)) {
+    throw ERR.INVALID_FRAME('node.update-status requires status');
+  }
+  const { status } = params as UpdateNodeStatusParams;
+  if (!['online', 'busy', 'offline'].includes(status)) {
+    throw ERR.INVALID_FRAME('Invalid status value');
+  }
+
+  updateNodeStatus(session.connId, status);
+  touchNode(session.connId);
+
+  return {
+    ok: true,
+    node: getNode(session.connId) ?? null,
   };
 }
