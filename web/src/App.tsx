@@ -44,6 +44,31 @@ interface EchoResponse {
   reverse: string;
 }
 
+interface NodeInfo {
+  connId: string;
+  name: string;
+  version: string;
+  platform: string;
+  capabilities: string[];
+  status: 'online' | 'busy' | 'offline';
+  lastSeen: number;
+  connectedAt: number;
+}
+
+interface ListNodesResponse {
+  count: number;
+  nodes: NodeInfo[];
+}
+
+interface RegisterNodeResponse {
+  ok: boolean;
+  node: NodeInfo;
+}
+
+interface NodeStatusResponse {
+  node: NodeInfo | null;
+}
+
 const RECONNECT_DELAY_MS = 3_000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const MAX_EVENT_LOG = 100;
@@ -57,6 +82,9 @@ export default function App() {
   const [echoResult, setEchoResult] = useState<EchoResponse | null>(null);
   const [echoInput, setEchoInput] = useState('');
   const [eventLog, setEventLog] = useState<LoggedEvent[]>([]);
+  const [nodes, setNodes] = useState<NodeInfo[]>([]);
+  const [nodeCount, setNodeCount] = useState(0);
+  const [nodeForm, setNodeForm] = useState({ name: '', version: '', platform: '' });
   const clientRef = useRef<GatewayClient | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const eventLogRef = useRef<HTMLDivElement>(null);
@@ -203,6 +231,38 @@ export default function App() {
     setEventLog([]);
   };
 
+  // --- Node management handlers ---
+
+  const handleRefreshNodes = async () => {
+    const client = clientRef.current;
+    if (!client?.isConnected) return;
+    try {
+      const res = await client.request<ListNodesResponse>('node.list');
+      setNodes(res.nodes);
+      setNodeCount(res.count);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取 nodes 失败');
+    }
+  };
+
+  const handleRegisterNode = async () => {
+    const client = clientRef.current;
+    if (!client?.isConnected || !nodeForm.name.trim()) return;
+    try {
+      const res = await client.request<RegisterNodeResponse>('node.register', {
+        name: nodeForm.name,
+        version: nodeForm.version || '0.1.0',
+        platform: nodeForm.platform || 'web',
+      });
+      if (res.ok) {
+        setNodeForm({ name: '', version: '', platform: '' });
+        handleRefreshNodes();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '注册 node 失败');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4">
       <div className="mx-auto max-w-2xl space-y-4">
@@ -320,6 +380,84 @@ export default function App() {
                     <div><span className="text-slate-400">role:</span> {s.role}</div>
                     <div><span className="text-slate-400">scopes:</span> {s.scopes.join(', ')}</div>
                     <div><span className="text-slate-400">connected:</span> {new Date(s.connectedAt).toLocaleTimeString()}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Node Management */}
+        <div className="rounded-lg border border-slate-700 bg-slate-800 p-6 shadow-xl">
+          <h2 className="text-lg font-semibold text-emerald-400 mb-4">节点管理</h2>
+
+          <div className="space-y-4">
+            {/* Register Node */}
+            <div className="grid grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={nodeForm.name}
+                onChange={(e) => setNodeForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="节点名称"
+                className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <input
+                type="text"
+                value={nodeForm.version}
+                onChange={(e) => setNodeForm((prev) => ({ ...prev, version: e.target.value }))}
+                placeholder="版本 (可选)"
+                className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <input
+                type="text"
+                value={nodeForm.platform}
+                onChange={(e) => setNodeForm((prev) => ({ ...prev, platform: e.target.value }))}
+                placeholder="平台 (可选)"
+                className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRegisterNode}
+                disabled={!clientRef.current?.isConnected || !nodeForm.name.trim()}
+                className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                node.register
+              </button>
+              <button
+                onClick={handleRefreshNodes}
+                disabled={!clientRef.current?.isConnected}
+                className="rounded bg-slate-600 px-4 py-2 text-sm font-medium hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                node.list
+              </button>
+              {nodeCount > 0 && (
+                <span className="text-sm text-slate-400">节点数: {nodeCount}</span>
+              )}
+            </div>
+
+            {nodes.length > 0 && (
+              <div className="space-y-2">
+                {nodes.map((node) => (
+                  <div key={node.connId} className="rounded border border-slate-600 bg-slate-700/50 p-3 text-sm font-mono">
+                    <div className="flex justify-between">
+                      <div>
+                        <span className="text-slate-400">name:</span> {node.name}
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        node.status === 'online' ? 'bg-green-600' :
+                        node.status === 'busy' ? 'bg-yellow-600' : 'bg-red-600'
+                      }`}>
+                        {node.status}
+                      </span>
+                    </div>
+                    <div><span className="text-slate-400">connId:</span> {node.connId.slice(0, 8)}…</div>
+                    <div><span className="text-slate-400">version:</span> {node.version}</div>
+                    <div><span className="text-slate-400">platform:</span> {node.platform}</div>
+                    {node.capabilities.length > 0 && (
+                      <div><span className="text-slate-400">capabilities:</span> {node.capabilities.join(', ')}</div>
+                    )}
+                    <div><span className="text-slate-400">connected:</span> {new Date(node.connectedAt).toLocaleTimeString()}</div>
                   </div>
                 ))}
               </div>
