@@ -2,14 +2,14 @@
   "name": "mini-openclaw",
   "private": true,
   "version": "0.1.0",
-  "description": "Mini OpenClaw — lightweight Gateway + Agent runtime",
+  "description": "OpenClaw 核心能力的精简重写",
   "type": "module",
   "scripts": {
     "dev": "pnpm --parallel -r run dev",
-    "dev:server": "pnpm --filter server dev",
-    "dev:web": "pnpm --filter web dev",
+    "dev:server": "pnpm --filter @mini-openclaw/server dev",
+    "dev:web": "pnpm --filter @mini-openclaw/web dev",
     "build": "pnpm -r run build",
-    "typecheck": "pnpm -r exec tsc --noEmit"
+    "typecheck": "pnpm -r run typecheck"
   },
   "packageManager": "pnpm@11.5.0",
   "engines": {

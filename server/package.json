@@ -1,28 +1,24 @@
 {
-  "name": "server",
+  "name": "@mini-openclaw/server",
   "version": "0.1.0",
-  "description": "Mini-OpenClaw Gateway — WebSocket control plane",
-  "main": "dist/index.js",
+  "private": true,
+  "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@11.5.0",
-  "type": "module",
   "dependencies": {
-    "ajv": "^8.20.0",
-    "dotenv": "^17.4.2",
-    "ws": "^8.21.0"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
+    "@types/node": "^22.19.0",
     "@types/ws": "^8.18.1",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

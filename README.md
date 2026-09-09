@@ -1,43 +1,28 @@
 # Mini-OpenClaw
 
-OpenClaw 核心功能的精简重写版，沿用相同技术栈：**TypeScript + Node.js + pnpm monorepo + WebSocket Gateway + React WebUI**。
+基于 [OpenClaw](https://github.com/openclaw/openclaw) 的精简重写。技术栈对齐：TypeScript、Node.js 22+、pnpm workspace、WebSocket Gateway、React WebUI。
 
-## 技术栈对齐
+## Day 1
 
-| 层级 | OpenClaw | Mini-OpenClaw |
-|------|----------|---------------|
-| 语言 | TypeScript (ES2023) | TypeScript (strict) |
-| 运行时 | Node.js 22.19+ | Node.js 22.19+ |
-| 包管理 | pnpm workspace | pnpm workspace |
-| 控制面 | WebSocket Gateway | `server/` WebSocket Gateway |
-| 前端 | Control UI / WebChat | `web/` React + Vite |
-| 协议 | connect → req/res/event | 已对齐 Phase 1（v1） |
-
-## 项目结构
-
-```
-mini-openclaw/
-├── server/
-│   └── src/
-│       ├── protocol/     # 帧类型 + JSON Schema 校验
-│       └── gateway/      # 连接管理 + RPC 路由
-├── web/
-│   └── src/
-│       └── gateway-client.ts
-├── pnpm-workspace.yaml
-└── package.json
-```
-
-## 快速开始
+目标：能跑起来的 Gateway 骨架 + 最小握手 + 能连上的 Web 页。
 
 ```bash
-pnpm install          # 根目录安装全部 workspace 依赖
-pnpm dev              # 并行启动 Gateway + WebUI
-pnpm dev:server       # 仅 Gateway（端口 8080）
-pnpm dev:web          # 仅 WebUI（Vite 默认 5173）
+pnpm install
+pnpm dev
+```
+
+- Gateway: `ws://127.0.0.1:18790`（避开本机正式 OpenClaw 的 18789）
+- WebUI: Vite 默认 `http://127.0.0.1:5173`
+
+## 目录
+
+```
+server/   WebSocket Gateway
+web/      Control UI（极简）
+desktop/  预留
 ```
 
 ## 参考
 
-- [OpenClaw Gateway Architecture](https://docs.openclaw.ai/concepts/architecture)
-- [OpenClaw Gateway Protocol](https://docs.openclaw.ai/gateway/protocol)
+- https://docs.openclaw.ai/concepts/architecture
+- https://docs.openclaw.ai/gateway/protocol

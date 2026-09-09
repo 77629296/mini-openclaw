@@ -1,16 +1,24 @@
-@import "tailwindcss";
-
-/* 整合你原有的主题色到 Tailwind 中 */
-@theme {
-  --color-claw-text: #6b6375;
-  --color-claw-heading: #08060d;
-  --color-claw-bg: #fff;
-  --color-claw-accent: #aa3bff;
+:root {
+  color: #1c1917;
+  background: #f5f2eb;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  line-height: 1.5;
 }
 
-/* 只保留最基础的全局重置，移除限制死宽度的布局 */
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  background-color: var(--bg);
-  color: var(--text);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
 }

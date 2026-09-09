@@ -1,197 +1,45 @@
-/** Mini-OpenClaw Gateway Protocol v1 — aligned with OpenClaw framing */
-
 export const PROTOCOL_VERSION = 1;
 
-export const GATEWAY_METHODS = [
-  'connect',
-  'health',
-  'status',
-  'whoami',
-  'system.ping',
-  'system.echo',
-  'system.sessions',
-  'node.register',
-  'node.list',
-  'node.status',
-  'node.update-status',
-] as const;
-export const GATEWAY_EVENTS = ['connect.challenge', 'tick', 'system.log'] as const;
+export type Role = "operator" | "node";
 
-export type GatewayMethod = (typeof GATEWAY_METHODS)[number];
-export type GatewayEvent = (typeof GATEWAY_EVENTS)[number];
-
-// --- Frames ---
-
-export interface ReqFrame {
-  type: 'req';
+export type ReqFrame = {
+  type: "req";
   id: string;
   method: string;
   params?: unknown;
-}
+};
 
-export interface ResFrame {
-  type: 'res';
+export type ResFrame = {
+  type: "res";
   id: string;
   ok: boolean;
   payload?: unknown;
-  error?: ResError;
-}
+  error?: {
+    code: string;
+    message: string;
+  };
+};
 
-export interface ResError {
-  code: string;
-  message: string;
-  details?: unknown;
-}
-
-export interface EventFrame {
-  type: 'event';
+export type EventFrame = {
+  type: "event";
   event: string;
   payload?: unknown;
-  seq?: number;
-}
+};
 
-export type WireFrame = ReqFrame | ResFrame | EventFrame;
+export type Frame = ReqFrame | ResFrame | EventFrame;
 
-// --- connect ---
-
-export interface ConnectClientInfo {
-  id: string;
-  version: string;
-  platform: string;
-  mode: string;
-}
-
-export interface ConnectParams {
+export type ConnectParams = {
   minProtocol: number;
   maxProtocol: number;
-  client: ConnectClientInfo;
-  role: 'operator' | 'node';
+  client: {
+    id: string;
+    version: string;
+    platform: string;
+    mode: string;
+  };
+  role: Role;
   scopes?: string[];
-  auth?: { token?: string };
-  locale?: string;
-  userAgent?: string;
-}
-
-export interface HelloOkPayload {
-  type: 'hello-ok';
-  protocol: number;
-  server: { version: string; connId: string };
-  features: { methods: readonly string[]; events: readonly string[] };
-  snapshot: { health: HealthPayload };
-  auth: { role: string; scopes: string[] };
-  policy: {
-    maxPayload: number;
-    maxBufferedBytes: number;
-    tickIntervalMs: number;
+  auth?: {
+    token?: string;
   };
-}
-
-// --- RPC payloads ---
-
-export interface HealthPayload {
-  ok: true;
-  status: 'healthy';
-  uptime: number;
-  version: string;
-  ts: number;
-}
-
-export interface StatusPayload {
-  gateway: { version: string; uptime: number; connId: string };
-  connections: number;
-  protocol: number;
-  role: string;
-  scopes: string[];
-}
-
-export interface WhoamiPayload {
-  connId: string;
-  role: 'operator' | 'node';
-  scopes: string[];
-  client?: ConnectClientInfo;
-  protocol: number;
-  connectedAt: number;
-}
-
-// --- system.* payloads ---
-
-export interface PingPayload {
-  pong: true;
-  ts: number;
-  echo?: string;
-}
-
-export interface EchoParams {
-  message: string;
-}
-
-export interface EchoPayload {
-  message: string;
-  length: number;
-  reverse: string;
-}
-
-export interface SessionsListEntry {
-  connId: string;
-  role: string;
-  scopes: string[];
-  connectedAt: number;
-}
-
-export interface SessionsPayload {
-  count: number;
-  sessions: SessionsListEntry[];
-}
-
-export interface SystemLogEvent {
-  type: 'event';
-  event: 'system.log';
-  payload: {
-    level: 'info' | 'warn' | 'error';
-    message: string;
-    source?: string;
-    ts: number;
-  };
-}
-
-// --- node management types ---
-
-export interface NodeInfo {
-  connId: string;
-  name: string;
-  version: string;
-  platform: string;
-  capabilities: string[];
-  status: 'online' | 'busy' | 'offline';
-  lastSeen: number;
-  connectedAt: number;
-}
-
-export interface RegisterNodeParams {
-  name: string;
-  version: string;
-  platform: string;
-  capabilities?: string[];
-}
-
-export interface RegisterNodePayload {
-  ok: boolean;
-  node: NodeInfo;
-}
-
-export interface ListNodesPayload {
-  count: number;
-  nodes: NodeInfo[];
-}
-
-export interface NodeStatusParams {
-  connId: string;
-}
-
-export interface NodeStatusPayload {
-  node: NodeInfo | null;
-}
-
-export interface UpdateNodeStatusParams {
-  status: 'online' | 'busy' | 'offline';
-}
+};

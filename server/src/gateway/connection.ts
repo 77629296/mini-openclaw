@@ -1,147 +1,213 @@
-import type { RawData, WebSocket } from 'ws';
-import { parseJsonFrame, assertReqFrame } from '../protocol/schema.js';
-import { ERR, ProtocolError } from '../protocol/errors.js';
-import type { EventFrame, ResFrame } from '../protocol/types.js';
+import { randomUUID } from "node:crypto";
+import type { WebSocket } from "ws";
+import type { Config } from "../config.js";
+import { parseFrame } from "../protocol/parse.js";
 import {
-  buildConnectChallenge,
-  buildRes,
-  buildTickEvent,
-  handleConnect,
-  handleEcho,
-  handleHealth,
-  handleListNode,
-  handleNodeStatus,
-  handlePing,
-  handleRegisterNode,
-  handleSessions,
-  handleStatus,
-  handleUpdateNodeStatus,
-  handleWhoami,
-} from './protocol-handler.js';
-import { createSession, nextEventSeq } from './session.js';
-import { getMethodHandler, registerMethod } from './router.js';
-import { incrementConnections, decrementConnections } from './state.js';
-import { registerSession, unregisterSession } from './session-registry.js';
+  PROTOCOL_VERSION,
+  type ConnectParams,
+  type EventFrame,
+  type ReqFrame,
+  type ResFrame,
+} from "../protocol/types.js";
+import { handleHealth } from "./methods.js";
 
-registerMethod('connect', handleConnect);
-registerMethod('health', () => handleHealth());
-registerMethod('status', (_params, session) => handleStatus(session));
-registerMethod('whoami', handleWhoami);
-registerMethod('system.ping', handlePing);
-registerMethod('system.echo', handleEcho);
-registerMethod('system.sessions', () => handleSessions());
-registerMethod('node.register', handleRegisterNode);
-registerMethod('node.list', () => handleListNode());
-registerMethod('node.status', handleNodeStatus);
-registerMethod('node.update-status', handleUpdateNodeStatus);
+type ConnState = {
+  id: string;
+  authed: boolean;
+  role: string | null;
+  challengeNonce: string;
+};
 
-const TICK_INTERVAL_MS = 15_000;
-
-function send(ws: WebSocket, frame: ResFrame | EventFrame): void {
-  if (ws.readyState === ws.OPEN) {
-    try {
-      ws.send(JSON.stringify(frame));
-    } catch (err) {
-      console.error('[Gateway] Failed to send ws message:', err);
-    }
-  }
-}
-
-function closeWithError(ws: WebSocket, code: string, message: string): void {
-  console.error(`[Gateway] Closing connection: ${code} — ${message}`);
-  if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
-    try {
-      ws.close(1008, message);
-    } catch (err) {
-      console.error('[Gateway] Failed to close ws connection safely:', err);
-    }
-  }
-}
-
-export function handleConnection(ws: WebSocket): void {
-  const session = createSession();
-  incrementConnections();
-  let tickTimer: ReturnType<typeof setInterval> | undefined;
-  let isCleanedUp = false;
-
-  console.log(`[Gateway] Client connected (${session.connId})`);
-  send(ws, buildConnectChallenge());
-
-  const cleanup = () => {
-    if (isCleanedUp) return;
-    isCleanedUp = true;
-
-    if (tickTimer) {
-      clearInterval(tickTimer);
-      tickTimer = undefined;
-    }
-    unregisterSession(session.connId);
-    decrementConnections();
-    console.log(`[Gateway] Client disconnected (${session.connId})`);
+export function handleConnection(socket: WebSocket, config: Config): void {
+  const state: ConnState = {
+    id: randomUUID(),
+    authed: false,
+    role: null,
+    challengeNonce: randomUUID(),
   };
 
-  ws.on('close', cleanup);
-  ws.on('error', (err) => {
-    console.error(`[Gateway] Connection error on ${session.connId}:`, err);
-    cleanup();
+  sendEvent(socket, {
+    type: "event",
+    event: "connect.challenge",
+    payload: {
+      nonce: state.challengeNonce,
+      ts: Date.now(),
+    },
   });
 
-  ws.on('message', async (rawData: RawData) => {
-    let reqId = 'unknown';
-
-    try {
-      const parsed = parseJsonFrame(rawData.toString());
-      const frame = assertReqFrame(parsed);
-      reqId = frame.id;
-
-      if (!session.handshakeComplete && frame.method !== 'connect') {
-        throw ERR.HANDSHAKE_REQUIRED();
-      }
-
-      const handler = getMethodHandler(frame.method);
-      if (!handler) {
-        throw ERR.UNKNOWN_METHOD(frame.method);
-      }
-
-      // Execute the method handler
-      const payload = await Promise.resolve(handler(frame.params, session));
-      
-      // Guard against connection release during async handler execution
-      if (isCleanedUp) return;
-
-      send(ws, buildRes(frame.id, true, payload));
-
-      if (frame.method === 'connect' && session.handshakeComplete) {
-        registerSession(session);
-        if (tickTimer) clearInterval(tickTimer);
-        
-        tickTimer = setInterval(() => {
-          if (ws.readyState === ws.OPEN) {
-            send(ws, buildTickEvent(nextEventSeq(session)));
-          }
-        }, TICK_INTERVAL_MS);
-      }
-    } catch (err) {
-      console.error(`[Gateway] Error processing message from ${session.connId}:`, err);
-      
-      const protocolErr =
-        err instanceof ProtocolError 
-          ? err 
-          : ERR.INVALID_FRAME(err instanceof Error ? err.message : String(err));
-          
-      if (!isCleanedUp) {
-        send(ws, buildRes(reqId, false, protocolErr));
-      }
-
-      const shouldClose = 
-        !session.handshakeComplete ||
-        protocolErr.code === 'HANDSHAKE_REQUIRED' ||
-        protocolErr.code === 'INVALID_JSON';
-
-      if (shouldClose) {
-        closeWithError(ws, protocolErr.code, protocolErr.message);
-        cleanup(); // Ensure local cleanup is triggered
-      }
+  const handshakeTimer = setTimeout(() => {
+    if (!state.authed) {
+      socket.close(1008, "handshake timeout");
     }
+  }, 15_000);
+
+  socket.on("message", (data) => {
+    const text = typeof data === "string" ? data : data.toString("utf8");
+    const frame = parseFrame(text);
+    if (!frame) {
+      socket.close(1003, "invalid frame");
+      return;
+    }
+
+    if (frame.type !== "req") {
+      if (!state.authed) {
+        socket.close(1008, "expected connect");
+      }
+      return;
+    }
+
+    void onRequest(socket, state, config, frame, handshakeTimer);
   });
+
+  socket.on("close", () => {
+    clearTimeout(handshakeTimer);
+  });
+}
+
+async function onRequest(
+  socket: WebSocket,
+  state: ConnState,
+  config: Config,
+  frame: ReqFrame,
+  handshakeTimer: NodeJS.Timeout,
+): Promise<void> {
+  if (!state.authed) {
+    if (frame.method !== "connect") {
+      sendRes(socket, {
+        type: "res",
+        id: frame.id,
+        ok: false,
+        error: { code: "NOT_CONNECTED", message: "first method must be connect" },
+      });
+      socket.close(1008, "expected connect");
+      return;
+    }
+
+    const result = tryConnect(state, config, frame.params);
+    if (!result.ok) {
+      sendRes(socket, {
+        type: "res",
+        id: frame.id,
+        ok: false,
+        error: result.error,
+      });
+      socket.close(1008, result.error.code);
+      return;
+    }
+
+    clearTimeout(handshakeTimer);
+    state.authed = true;
+    state.role = result.role;
+
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: true,
+      payload: {
+        type: "hello-ok",
+        protocol: PROTOCOL_VERSION,
+        server: {
+          version: "0.1.0",
+          connId: state.id,
+        },
+        features: {
+          methods: ["health"],
+          events: ["tick"],
+        },
+        snapshot: {
+          uptimeMs: Math.floor(process.uptime() * 1000),
+        },
+        auth: {
+          role: result.role,
+          scopes: result.scopes,
+        },
+        policy: {
+          maxPayload: 1024 * 1024,
+          tickIntervalMs: 15_000,
+        },
+      },
+    });
+    return;
+  }
+
+  if (frame.method === "health") {
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: true,
+      payload: handleHealth(),
+    });
+    return;
+  }
+
+  sendRes(socket, {
+    type: "res",
+    id: frame.id,
+    ok: false,
+    error: { code: "METHOD_NOT_FOUND", message: `unknown method: ${frame.method}` },
+  });
+}
+
+function tryConnect(
+  state: ConnState,
+  config: Config,
+  params: unknown,
+):
+  | { ok: true; role: string; scopes: string[] }
+  | { ok: false; error: { code: string; message: string } } {
+  if (!params || typeof params !== "object") {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "connect params required" } };
+  }
+
+  const p = params as ConnectParams;
+
+  if (
+    typeof p.minProtocol !== "number" ||
+    typeof p.maxProtocol !== "number" ||
+    p.minProtocol > PROTOCOL_VERSION ||
+    p.maxProtocol < PROTOCOL_VERSION
+  ) {
+    return {
+      ok: false,
+      error: {
+        code: "PROTOCOL_MISMATCH",
+        message: `server protocol ${PROTOCOL_VERSION}`,
+      },
+    };
+  }
+
+  if (!p.client?.id || !p.role) {
+    return {
+      ok: false,
+      error: { code: "INVALID_REQUEST", message: "client and role required" },
+    };
+  }
+
+  if (config.token) {
+    const got = p.auth?.token;
+    if (got !== config.token) {
+      return { ok: false, error: { code: "UNAUTHORIZED", message: "bad token" } };
+    }
+  }
+
+  // Day1: challenge nonce is issued but device signature is not verified yet.
+  void state.challengeNonce;
+
+  return {
+    ok: true,
+    role: p.role,
+    scopes: p.scopes ?? ["operator.read"],
+  };
+}
+
+function sendEvent(socket: WebSocket, frame: EventFrame): void {
+  if (socket.readyState === socket.OPEN) {
+    socket.send(JSON.stringify(frame));
+  }
+}
+
+function sendRes(socket: WebSocket, frame: ResFrame): void {
+  if (socket.readyState === socket.OPEN) {
+    socket.send(JSON.stringify(frame));
+  }
 }
