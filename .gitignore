@@ -74,3 +74,5 @@ dist/
 *.njsproj
 *.sln
 *.swp
+
+.cursor
