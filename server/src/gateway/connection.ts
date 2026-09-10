@@ -11,6 +11,8 @@ import {
 } from "../protocol/types.js";
 import { handleHealth } from "./methods.js";
 
+const TICK_INTERVAL_MS = 15_000;
+
 type ConnState = {
   id: string;
   authed: boolean;
@@ -25,6 +27,8 @@ export function handleConnection(socket: WebSocket, config: Config): void {
     role: null,
     challengeNonce: randomUUID(),
   };
+
+  const timers: { tick: ReturnType<typeof setInterval> | null } = { tick: null };
 
   sendEvent(socket, {
     type: "event",
@@ -56,11 +60,12 @@ export function handleConnection(socket: WebSocket, config: Config): void {
       return;
     }
 
-    void onRequest(socket, state, config, frame, handshakeTimer);
+    void onRequest(socket, state, config, frame, handshakeTimer, timers);
   });
 
   socket.on("close", () => {
     clearTimeout(handshakeTimer);
+    if (timers.tick) clearInterval(timers.tick);
   });
 }
 
@@ -70,6 +75,7 @@ async function onRequest(
   config: Config,
   frame: ReqFrame,
   handshakeTimer: NodeJS.Timeout,
+  timers: { tick: ReturnType<typeof setInterval> | null },
 ): Promise<void> {
   if (!state.authed) {
     if (frame.method !== "connect") {
@@ -123,10 +129,21 @@ async function onRequest(
         },
         policy: {
           maxPayload: 1024 * 1024,
-          tickIntervalMs: 15_000,
+          tickIntervalMs: TICK_INTERVAL_MS,
         },
       },
     });
+
+    // keepalive only after handshake; stop in socket "close"
+    if (!timers.tick) {
+      timers.tick = setInterval(() => {
+        sendEvent(socket, {
+          type: "event",
+          event: "tick",
+          payload: { ts: Date.now() },
+        });
+      }, TICK_INTERVAL_MS);
+    }
     return;
   }
 
