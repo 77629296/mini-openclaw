@@ -9,7 +9,7 @@ import {
   type ReqFrame,
   type ResFrame,
 } from "../protocol/types.js";
-import { handleHealth } from "./methods.js";
+import { handleHealth, handleStatus } from "./methods.js";
 
 const TICK_INTERVAL_MS = 15_000;
 
@@ -17,6 +17,7 @@ type ConnState = {
   id: string;
   authed: boolean;
   role: string | null;
+  scopes: string[];
   challengeNonce: string;
 };
 
@@ -25,6 +26,7 @@ export function handleConnection(socket: WebSocket, config: Config): void {
     id: randomUUID(),
     authed: false,
     role: null,
+    scopes: [],
     challengeNonce: randomUUID(),
   };
 
@@ -104,6 +106,7 @@ async function onRequest(
     clearTimeout(handshakeTimer);
     state.authed = true;
     state.role = result.role;
+    state.scopes = result.scopes;
 
     sendRes(socket, {
       type: "res",
@@ -117,7 +120,7 @@ async function onRequest(
           connId: state.id,
         },
         features: {
-          methods: ["health"],
+          methods: ["health", "status"],
           events: ["tick"],
         },
         snapshot: {
@@ -153,6 +156,21 @@ async function onRequest(
       id: frame.id,
       ok: true,
       payload: handleHealth(),
+    });
+    return;
+  }
+
+  if (frame.method === "status") {
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: true,
+      payload: handleStatus({
+        connId: state.id,
+        role: state.role,
+        scopes: state.scopes,
+        protocol: PROTOCOL_VERSION,
+      }),
     });
     return;
   }
