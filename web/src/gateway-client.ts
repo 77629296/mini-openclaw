@@ -34,11 +34,16 @@ export type GatewayClientOptions = {
   clientId?: string;
 };
 
+const MAX_RECONNECT_MS = 10_000;
+
 export class GatewayClient {
   private ws: WebSocket | null = null;
   private pending = new Map<string, Pending>();
   private seq = 0;
   private challengeNonce: string | null = null;
+  private stopped = false;
+  private attempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   onHello: ((payload: unknown) => void) | null = null;
   onStatus: ((status: string) => void) | null = null;
@@ -47,7 +52,34 @@ export class GatewayClient {
   constructor(private opts: GatewayClientOptions) {}
 
   connect(): void {
-    this.close();
+    this.stopped = false;
+    this.openSocket();
+  }
+
+  close(): void {
+    this.stopped = true;
+    this.clearReconnect();
+    this.dropSocket();
+    this.failAll(new Error("closed"));
+  }
+
+  request(method: string, params?: unknown): Promise<ResFrame> {
+    const id = `req-${++this.seq}`;
+    const frame: ReqFrame = { type: "req", id, method, params };
+
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        reject(new Error("not connected"));
+        return;
+      }
+      this.pending.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify(frame));
+    });
+  }
+
+  private openSocket(): void {
+    this.clearReconnect();
+    this.dropSocket();
     this.onStatus?.("connecting");
 
     const ws = new WebSocket(this.opts.url);
@@ -67,30 +99,42 @@ export class GatewayClient {
     };
 
     ws.onclose = () => {
-      this.onStatus?.("closed");
-      this.failAll(new Error("socket closed"));
       this.ws = null;
+      this.failAll(new Error("socket closed"));
+      if (this.stopped) {
+        this.onStatus?.("closed");
+        return;
+      }
+      this.scheduleReconnect();
     };
   }
 
-  close(): void {
-    this.ws?.close();
-    this.ws = null;
-    this.failAll(new Error("closed"));
+  private scheduleReconnect(): void {
+    const delay = Math.min(1000 * 2 ** this.attempt, MAX_RECONNECT_MS);
+    this.attempt += 1;
+    this.onStatus?.(`reconnect in ${Math.ceil(delay / 1000)}s`);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket();
+    }, delay);
   }
 
-  request(method: string, params?: unknown): Promise<ResFrame> {
-    const id = `req-${++this.seq}`;
-    const frame: ReqFrame = { type: "req", id, method, params };
+  private clearReconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
 
-    return new Promise((resolve, reject) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        reject(new Error("not connected"));
-        return;
-      }
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify(frame));
-    });
+  private dropSocket(): void {
+    if (!this.ws) return;
+    const ws = this.ws;
+    this.ws = null;
+    ws.onopen = null;
+    ws.onmessage = null;
+    ws.onerror = null;
+    ws.onclose = null;
+    ws.close();
   }
 
   private handleFrame(frame: Frame): void {
@@ -127,7 +171,7 @@ export class GatewayClient {
       role: "operator" satisfies Role,
       scopes: ["operator.read"],
       auth: this.opts.token ? { token: this.opts.token } : undefined,
-      // Day1: carry nonce only; signature comes later
+      // challenge nonce only; signature comes later
       device: this.challengeNonce
         ? { nonce: this.challengeNonce, signedAt: Date.now() }
         : undefined,
@@ -139,6 +183,7 @@ export class GatewayClient {
       return;
     }
 
+    this.attempt = 0;
     this.onHello?.(res.payload);
     this.onStatus?.("ready");
   }
