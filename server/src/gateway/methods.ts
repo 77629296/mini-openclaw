@@ -1,3 +1,5 @@
+import { createSession, listSessions } from "./sessions.js";
+
 export function handleHealth() {
   return {
     ok: true,
@@ -20,4 +22,16 @@ export function handleStatus(info: {
     uptimeMs: Math.floor(process.uptime() * 1000),
     ts: Date.now(),
   };
+}
+
+export function handleSessionsCreate(params: unknown) {
+  const title =
+    params && typeof params === "object" && "title" in params
+      ? String((params as { title?: unknown }).title ?? "")
+      : undefined;
+  return { session: createSession(title) };
+}
+
+export function handleSessionsList() {
+  return { sessions: listSessions() };
 }

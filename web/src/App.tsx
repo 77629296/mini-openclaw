@@ -10,7 +10,9 @@ export default function App() {
   const [hello, setHello] = useState<unknown>(null);
   const [health, setHealth] = useState<unknown>(null);
   const [status, setStatus] = useState<unknown>(null);
+  const [sessions, setSessions] = useState<unknown>(null);
   const [lastTick, setLastTick] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
 
   useEffect(() => {
     const client = new GatewayClient({ url: WS_URL });
@@ -30,13 +32,28 @@ export default function App() {
     };
   }, []);
 
-  async function call(method: "health" | "status") {
+  async function call(method: "health" | "status" | "sessions.list") {
     const client = clientRef.current;
     if (!client) return;
     const res = await client.request(method);
     const value = res.ok ? res.payload : res.error;
     if (method === "health") setHealth(value);
-    else setStatus(value);
+    else if (method === "status") setStatus(value);
+    else setSessions(value);
+  }
+
+  async function createSession() {
+    const client = clientRef.current;
+    if (!client) return;
+    const res = await client.request("sessions.create", {
+      title: title.trim() || undefined,
+    });
+    if (!res.ok) {
+      setSessions(res.error);
+      return;
+    }
+    setTitle("");
+    await call("sessions.list");
   }
 
   const ready = connStatus === "ready";
@@ -68,6 +85,25 @@ export default function App() {
         <pre>{status ? JSON.stringify(status, null, 2) : "尚未调用"}</pre>
         <h2>health</h2>
         <pre>{health ? JSON.stringify(health, null, 2) : "尚未调用"}</pre>
+      </section>
+
+      <section>
+        <h2>sessions</h2>
+        <div className="actions">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="session title"
+            disabled={!ready}
+          />
+          <button type="button" onClick={() => void createSession()} disabled={!ready}>
+            create
+          </button>
+          <button type="button" onClick={() => void call("sessions.list")} disabled={!ready}>
+            list
+          </button>
+        </div>
+        <pre>{sessions ? JSON.stringify(sessions, null, 2) : "尚未调用"}</pre>
       </section>
     </main>
   );

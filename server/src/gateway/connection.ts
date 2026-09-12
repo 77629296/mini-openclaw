@@ -9,7 +9,12 @@ import {
   type ReqFrame,
   type ResFrame,
 } from "../protocol/types.js";
-import { handleHealth, handleStatus } from "./methods.js";
+import {
+  handleHealth,
+  handleSessionsCreate,
+  handleSessionsList,
+  handleStatus,
+} from "./methods.js";
 
 const TICK_INTERVAL_MS = 15_000;
 
@@ -120,7 +125,7 @@ async function onRequest(
           connId: state.id,
         },
         features: {
-          methods: ["health", "status"],
+          methods: ["health", "status", "sessions.create", "sessions.list"],
           events: ["tick"],
         },
         snapshot: {
@@ -171,6 +176,26 @@ async function onRequest(
         scopes: state.scopes,
         protocol: PROTOCOL_VERSION,
       }),
+    });
+    return;
+  }
+
+  if (frame.method === "sessions.create") {
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: true,
+      payload: handleSessionsCreate(frame.params),
+    });
+    return;
+  }
+
+  if (frame.method === "sessions.list") {
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: true,
+      payload: handleSessionsList(),
     });
     return;
   }
