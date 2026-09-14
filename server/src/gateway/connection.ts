@@ -10,6 +10,8 @@ import {
   type ResFrame,
 } from "../protocol/types.js";
 import {
+  handleChatHistory,
+  handleChatSend,
   handleHealth,
   handleSessionsCreate,
   handleSessionsDelete,
@@ -134,6 +136,8 @@ async function onRequest(
             "sessions.list",
             "sessions.get",
             "sessions.delete",
+            "chat.send",
+            "chat.history",
           ],
           events: ["tick"],
         },
@@ -222,6 +226,28 @@ async function onRequest(
 
   if (frame.method === "sessions.delete") {
     const result = handleSessionsDelete(frame.params);
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: result.ok,
+      ...(result.ok ? { payload: result.payload } : { error: result.error }),
+    });
+    return;
+  }
+
+  if (frame.method === "chat.send") {
+    const result = handleChatSend(frame.params);
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: result.ok,
+      ...(result.ok ? { payload: result.payload } : { error: result.error }),
+    });
+    return;
+  }
+
+  if (frame.method === "chat.history") {
+    const result = handleChatHistory(frame.params);
     sendRes(socket, {
       type: "res",
       id: frame.id,

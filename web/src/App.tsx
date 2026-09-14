@@ -19,10 +19,12 @@ export default function App() {
   const [status, setStatus] = useState<unknown>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [sessionDetail, setSessionDetail] = useState<unknown>(null);
+  const [history, setHistory] = useState<unknown>(null);
   const [sessionError, setSessionError] = useState<unknown>(null);
   const [lastTick, setLastTick] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [chatText, setChatText] = useState("");
 
   useEffect(() => {
     const client = new GatewayClient({ url: WS_URL });
@@ -102,6 +104,31 @@ export default function App() {
     }
     setSelectedId("");
     setSessionDetail(null);
+    setHistory(null);
+    await refreshSessions();
+  }
+
+  async function loadHistory() {
+    const client = clientRef.current;
+    if (!client || !selectedId) return;
+    const res = await client.request("chat.history", { sessionId: selectedId });
+    setHistory(res.ok ? res.payload : res.error);
+  }
+
+  async function sendChat() {
+    const client = clientRef.current;
+    if (!client || !selectedId || !chatText.trim()) return;
+    const res = await client.request("chat.send", {
+      sessionId: selectedId,
+      role: "user",
+      text: chatText.trim(),
+    });
+    if (!res.ok) {
+      setHistory(res.error);
+      return;
+    }
+    setChatText("");
+    await loadHistory();
     await refreshSessions();
   }
 
@@ -181,6 +208,29 @@ export default function App() {
         </pre>
         <h2>session detail</h2>
         <pre>{sessionDetail ? JSON.stringify(sessionDetail, null, 2) : "尚未调用"}</pre>
+      </section>
+
+      <section>
+        <h2>chat</h2>
+        <div className="actions">
+          <input
+            value={chatText}
+            onChange={(e) => setChatText(e.target.value)}
+            placeholder="message text"
+            disabled={!ready || !selectedId}
+          />
+          <button
+            type="button"
+            onClick={() => void sendChat()}
+            disabled={!ready || !selectedId || !chatText.trim()}
+          >
+            send
+          </button>
+          <button type="button" onClick={() => void loadHistory()} disabled={!ready || !selectedId}>
+            history
+          </button>
+        </div>
+        <pre>{history ? JSON.stringify(history, null, 2) : "尚未调用"}</pre>
       </section>
     </main>
   );

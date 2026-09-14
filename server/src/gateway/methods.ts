@@ -1,4 +1,5 @@
 import {
+  appendMessage,
   createSession,
   deleteSession,
   getSession,
@@ -34,7 +35,9 @@ export function handleSessionsCreate(params: unknown) {
     params && typeof params === "object" && "title" in params
       ? String((params as { title?: unknown }).title ?? "")
       : undefined;
-  return { session: createSession(title) };
+  const session = createSession(title);
+  const { messages: _messages, ...summary } = session;
+  return { session: summary };
 }
 
 export function handleSessionsList() {
@@ -68,8 +71,54 @@ export function handleSessionsDelete(params: unknown):
   return { ok: true, payload: { deleted: true, id } };
 }
 
+export function handleChatSend(params: unknown):
+  | { ok: true; payload: { message: unknown; sessionId: string } }
+  | { ok: false; error: { code: string; message: string } } {
+  if (!params || typeof params !== "object") {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "params required" } };
+  }
+  const p = params as { sessionId?: unknown; role?: unknown; text?: unknown };
+  const sessionId = typeof p.sessionId === "string" ? p.sessionId.trim() : "";
+  if (!sessionId) {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "sessionId required" } };
+  }
+
+  const result = appendMessage(sessionId, {
+    role: typeof p.role === "string" ? p.role : undefined,
+    text: typeof p.text === "string" ? p.text : undefined,
+  });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    payload: { message: result.message, sessionId },
+  };
+}
+
+export function handleChatHistory(params: unknown):
+  | { ok: true; payload: { sessionId: string; messages: unknown[] } }
+  | { ok: false; error: { code: string; message: string } } {
+  const sessionId = readSessionId(params);
+  if (!sessionId) {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "sessionId required" } };
+  }
+  const session = getSession(sessionId);
+  if (!session) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "session not found" } };
+  }
+  return {
+    ok: true,
+    payload: { sessionId, messages: session.messages },
+  };
+}
+
 function readId(params: unknown): string | null {
   if (!params || typeof params !== "object") return null;
   const id = (params as { id?: unknown }).id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
+function readSessionId(params: unknown): string | null {
+  if (!params || typeof params !== "object") return null;
+  const id = (params as { sessionId?: unknown }).sessionId;
   return typeof id === "string" && id.trim() ? id.trim() : null;
 }
