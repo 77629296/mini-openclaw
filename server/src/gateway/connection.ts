@@ -12,6 +12,8 @@ import {
 import {
   handleHealth,
   handleSessionsCreate,
+  handleSessionsDelete,
+  handleSessionsGet,
   handleSessionsList,
   handleStatus,
 } from "./methods.js";
@@ -125,7 +127,14 @@ async function onRequest(
           connId: state.id,
         },
         features: {
-          methods: ["health", "status", "sessions.create", "sessions.list"],
+          methods: [
+            "health",
+            "status",
+            "sessions.create",
+            "sessions.list",
+            "sessions.get",
+            "sessions.delete",
+          ],
           events: ["tick"],
         },
         snapshot: {
@@ -196,6 +205,28 @@ async function onRequest(
       id: frame.id,
       ok: true,
       payload: handleSessionsList(),
+    });
+    return;
+  }
+
+  if (frame.method === "sessions.get") {
+    const result = handleSessionsGet(frame.params);
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: result.ok,
+      ...(result.ok ? { payload: result.payload } : { error: result.error }),
+    });
+    return;
+  }
+
+  if (frame.method === "sessions.delete") {
+    const result = handleSessionsDelete(frame.params);
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: result.ok,
+      ...(result.ok ? { payload: result.payload } : { error: result.error }),
     });
     return;
   }

@@ -4,15 +4,25 @@ import "./App.css";
 
 const WS_URL = import.meta.env.VITE_GATEWAY_URL ?? "ws://127.0.0.1:18790";
 
+type SessionRow = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export default function App() {
   const clientRef = useRef<GatewayClient | null>(null);
   const [connStatus, setConnStatus] = useState("idle");
   const [hello, setHello] = useState<unknown>(null);
   const [health, setHealth] = useState<unknown>(null);
   const [status, setStatus] = useState<unknown>(null);
-  const [sessions, setSessions] = useState<unknown>(null);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [sessionDetail, setSessionDetail] = useState<unknown>(null);
+  const [sessionError, setSessionError] = useState<unknown>(null);
   const [lastTick, setLastTick] = useState<string | null>(null);
   const [title, setTitle] = useState("");
+  const [selectedId, setSelectedId] = useState("");
 
   useEffect(() => {
     const client = new GatewayClient({ url: WS_URL });
@@ -32,14 +42,26 @@ export default function App() {
     };
   }, []);
 
-  async function call(method: "health" | "status" | "sessions.list") {
+  async function call(method: "health" | "status") {
     const client = clientRef.current;
     if (!client) return;
     const res = await client.request(method);
     const value = res.ok ? res.payload : res.error;
     if (method === "health") setHealth(value);
-    else if (method === "status") setStatus(value);
-    else setSessions(value);
+    else setStatus(value);
+  }
+
+  async function refreshSessions() {
+    const client = clientRef.current;
+    if (!client) return;
+    const res = await client.request("sessions.list");
+    if (!res.ok) {
+      setSessionError(res.error);
+      return;
+    }
+    const payload = res.payload as { sessions?: SessionRow[] };
+    setSessions(payload.sessions ?? []);
+    setSessionError(null);
   }
 
   async function createSession() {
@@ -49,11 +71,38 @@ export default function App() {
       title: title.trim() || undefined,
     });
     if (!res.ok) {
-      setSessions(res.error);
+      setSessionError(res.error);
       return;
     }
+    const payload = res.payload as { session?: SessionRow };
+    if (payload.session) setSelectedId(payload.session.id);
     setTitle("");
-    await call("sessions.list");
+    await refreshSessions();
+  }
+
+  async function getSession() {
+    const client = clientRef.current;
+    if (!client || !selectedId) return;
+    const res = await client.request("sessions.get", { id: selectedId });
+    if (!res.ok) {
+      setSessionDetail(res.error);
+      return;
+    }
+    setSessionDetail(res.payload);
+    setSessionError(null);
+  }
+
+  async function removeSession() {
+    const client = clientRef.current;
+    if (!client || !selectedId) return;
+    const res = await client.request("sessions.delete", { id: selectedId });
+    if (!res.ok) {
+      setSessionError(res.error);
+      return;
+    }
+    setSelectedId("");
+    setSessionDetail(null);
+    await refreshSessions();
   }
 
   const ready = connStatus === "ready";
@@ -99,11 +148,39 @@ export default function App() {
           <button type="button" onClick={() => void createSession()} disabled={!ready}>
             create
           </button>
-          <button type="button" onClick={() => void call("sessions.list")} disabled={!ready}>
+          <button type="button" onClick={() => void refreshSessions()} disabled={!ready}>
             list
           </button>
         </div>
-        <pre>{sessions ? JSON.stringify(sessions, null, 2) : "尚未调用"}</pre>
+        <div className="actions">
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            disabled={!ready || sessions.length === 0}
+          >
+            <option value="">select session</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title} ({s.id.slice(0, 8)})
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void getSession()} disabled={!ready || !selectedId}>
+            get
+          </button>
+          <button type="button" onClick={() => void removeSession()} disabled={!ready || !selectedId}>
+            delete
+          </button>
+        </div>
+        <pre>
+          {sessionError
+            ? JSON.stringify(sessionError, null, 2)
+            : sessions.length
+              ? JSON.stringify({ sessions }, null, 2)
+              : "尚未调用"}
+        </pre>
+        <h2>session detail</h2>
+        <pre>{sessionDetail ? JSON.stringify(sessionDetail, null, 2) : "尚未调用"}</pre>
       </section>
     </main>
   );

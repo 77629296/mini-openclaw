@@ -47,7 +47,8 @@ pre {
   margin-bottom: 16px;
 }
 
-input {
+input,
+select {
   flex: 1;
   min-width: 0;
   padding: 8px 12px;
