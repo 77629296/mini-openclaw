@@ -72,7 +72,14 @@ export function handleSessionsDelete(params: unknown):
 }
 
 export function handleChatSend(params: unknown):
-  | { ok: true; payload: { message: unknown; sessionId: string } }
+  | {
+      ok: true;
+      payload: {
+        sessionId: string;
+        message: unknown;
+        reply: unknown;
+      };
+    }
   | { ok: false; error: { code: string; message: string } } {
   if (!params || typeof params !== "object") {
     return { ok: false, error: { code: "INVALID_REQUEST", message: "params required" } };
@@ -83,14 +90,25 @@ export function handleChatSend(params: unknown):
     return { ok: false, error: { code: "INVALID_REQUEST", message: "sessionId required" } };
   }
 
-  const result = appendMessage(sessionId, {
-    role: typeof p.role === "string" ? p.role : undefined,
-    text: typeof p.text === "string" ? p.text : undefined,
-  });
+  const role = typeof p.role === "string" ? p.role : "user";
+  const text = typeof p.text === "string" ? p.text : undefined;
+
+  const result = appendMessage(sessionId, { role, text });
   if (!result.ok) return result;
+
+  // stub model: only auto-reply when the client sent a user turn
+  let reply: unknown = null;
+  if (result.message.role === "user") {
+    const echoed = appendMessage(sessionId, {
+      role: "assistant",
+      text: `echo: ${result.message.text}`,
+    });
+    if (echoed.ok) reply = echoed.message;
+  }
+
   return {
     ok: true,
-    payload: { message: result.message, sessionId },
+    payload: { sessionId, message: result.message, reply },
   };
 }
 
