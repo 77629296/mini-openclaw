@@ -139,7 +139,7 @@ async function onRequest(
             "chat.send",
             "chat.history",
           ],
-          events: ["tick"],
+          events: ["tick", "chat"],
         },
         snapshot: {
           uptimeMs: Math.floor(process.uptime() * 1000),
@@ -243,6 +243,26 @@ async function onRequest(
       ok: result.ok,
       ...(result.ok ? { payload: result.payload } : { error: result.error }),
     });
+    if (result.ok) {
+      sendEvent(socket, {
+        type: "event",
+        event: "chat",
+        payload: {
+          sessionId: result.payload.sessionId,
+          message: result.payload.message,
+        },
+      });
+      if (result.payload.reply) {
+        sendEvent(socket, {
+          type: "event",
+          event: "chat",
+          payload: {
+            sessionId: result.payload.sessionId,
+            message: result.payload.reply,
+          },
+        });
+      }
+    }
     return;
   }
 

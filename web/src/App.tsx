@@ -22,9 +22,12 @@ export default function App() {
   const [history, setHistory] = useState<unknown>(null);
   const [sessionError, setSessionError] = useState<unknown>(null);
   const [lastTick, setLastTick] = useState<string | null>(null);
+  const [lastChat, setLastChat] = useState<unknown>(null);
   const [title, setTitle] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [chatText, setChatText] = useState("");
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     const client = new GatewayClient({ url: WS_URL });
@@ -32,9 +35,20 @@ export default function App() {
     client.onStatus = setConnStatus;
     client.onHello = setHello;
     client.onEvent = (event, payload) => {
-      if (event !== "tick") return;
-      const ts = (payload as { ts?: number } | undefined)?.ts;
-      setLastTick(ts ? new Date(ts).toLocaleTimeString() : new Date().toLocaleTimeString());
+      if (event === "tick") {
+        const ts = (payload as { ts?: number } | undefined)?.ts;
+        setLastTick(ts ? new Date(ts).toLocaleTimeString() : new Date().toLocaleTimeString());
+        return;
+      }
+      if (event === "chat") {
+        setLastChat(payload);
+        const sessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
+        if (sessionId && sessionId === selectedIdRef.current) {
+          void client.request("chat.history", { sessionId }).then((res) => {
+            setHistory(res.ok ? res.payload : res.error);
+          });
+        }
+      }
     };
     client.connect();
 
@@ -141,6 +155,7 @@ export default function App() {
         <h1>Gateway</h1>
         <p className="sub">状态：{connStatus}</p>
         <p className="sub">最近 tick：{lastTick ?? "还没有"}</p>
+        <p className="sub">最近 chat event：{lastChat ? "已收到" : "还没有"}</p>
       </header>
 
       <section>
@@ -231,6 +246,8 @@ export default function App() {
           </button>
         </div>
         <pre>{history ? JSON.stringify(history, null, 2) : "尚未调用"}</pre>
+        <h2>last chat event</h2>
+        <pre>{lastChat ? JSON.stringify(lastChat, null, 2) : "尚未收到"}</pre>
       </section>
     </main>
   );
