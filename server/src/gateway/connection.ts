@@ -9,6 +9,7 @@ import {
   type ReqFrame,
   type ResFrame,
 } from "../protocol/types.js";
+import { addClient, broadcastEvent, removeClient } from "./clients.js";
 import {
   handleChatHistory,
   handleChatSend,
@@ -78,6 +79,7 @@ export function handleConnection(socket: WebSocket, config: Config): void {
   socket.on("close", () => {
     clearTimeout(handshakeTimer);
     if (timers.tick) clearInterval(timers.tick);
+    removeClient(socket);
   });
 }
 
@@ -117,6 +119,7 @@ async function onRequest(
     state.authed = true;
     state.role = result.role;
     state.scopes = result.scopes;
+    addClient(socket);
 
     sendRes(socket, {
       type: "res",
@@ -257,7 +260,7 @@ async function onRequest(
       ...(result.ok ? { payload: result.payload } : { error: result.error }),
     });
     if (result.ok) {
-      sendEvent(socket, {
+      broadcastEvent({
         type: "event",
         event: "chat",
         payload: {
@@ -266,7 +269,7 @@ async function onRequest(
         },
       });
       if (result.payload.reply) {
-        sendEvent(socket, {
+        broadcastEvent({
           type: "event",
           event: "chat",
           payload: {
