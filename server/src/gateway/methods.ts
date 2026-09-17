@@ -4,6 +4,8 @@ import {
   deleteSession,
   getSession,
   listSessions,
+  patchSession,
+  type SessionSummary,
 } from "./sessions.js";
 
 export function handleHealth() {
@@ -69,6 +71,27 @@ export function handleSessionsDelete(params: unknown):
     return { ok: false, error: { code: "NOT_FOUND", message: "session not found" } };
   }
   return { ok: true, payload: { deleted: true, id } };
+}
+
+export function handleSessionsPatch(params: unknown):
+  | { ok: true; payload: { session: SessionSummary } }
+  | { ok: false; error: { code: string; message: string } } {
+  const id = readId(params);
+  if (!id) {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "session id required" } };
+  }
+  if (!params || typeof params !== "object") {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "params required" } };
+  }
+  const title = (params as { title?: unknown }).title;
+  if (typeof title !== "string") {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "title required" } };
+  }
+
+  const result = patchSession(id, { title });
+  if (!result.ok) return result;
+  const { messages: _messages, ...summary } = result.session;
+  return { ok: true, payload: { session: summary } };
 }
 
 export function handleChatSend(params: unknown):

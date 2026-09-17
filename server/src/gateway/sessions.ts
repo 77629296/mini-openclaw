@@ -58,6 +58,30 @@ export function deleteSession(id: string): boolean {
   return ok;
 }
 
+export function patchSession(
+  id: string,
+  patch: { title?: string },
+):
+  | { ok: true; session: Session }
+  | { ok: false; error: { code: string; message: string } } {
+  const session = store.get(id);
+  if (!session) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "session not found" } };
+  }
+
+  if (typeof patch.title === "string") {
+    const title = patch.title.trim();
+    if (!title) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "title required" } };
+    }
+    session.title = title;
+    session.updatedAt = Date.now();
+    scheduleSave();
+  }
+
+  return { ok: true, session };
+}
+
 export function appendMessage(
   sessionId: string,
   input: { role?: string; text?: string },

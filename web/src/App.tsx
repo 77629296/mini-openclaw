@@ -122,6 +122,22 @@ export default function App() {
     await refreshSessions();
   }
 
+  async function renameSession() {
+    const client = clientRef.current;
+    if (!client || !selectedId || !title.trim()) return;
+    const res = await client.request("sessions.patch", {
+      id: selectedId,
+      title: title.trim(),
+    });
+    if (!res.ok) {
+      setSessionError(res.error);
+      return;
+    }
+    setTitle("");
+    await refreshSessions();
+    await getSession();
+  }
+
   async function loadHistory() {
     const client = clientRef.current;
     if (!client || !selectedId) return;
@@ -189,6 +205,13 @@ export default function App() {
           />
           <button type="button" onClick={() => void createSession()} disabled={!ready}>
             create
+          </button>
+          <button
+            type="button"
+            onClick={() => void renameSession()}
+            disabled={!ready || !selectedId || !title.trim()}
+          >
+            rename
           </button>
           <button type="button" onClick={() => void refreshSessions()} disabled={!ready}>
             list

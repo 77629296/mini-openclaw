@@ -17,6 +17,7 @@ import {
   handleSessionsDelete,
   handleSessionsGet,
   handleSessionsList,
+  handleSessionsPatch,
   handleStatus,
 } from "./methods.js";
 
@@ -136,6 +137,7 @@ async function onRequest(
             "sessions.list",
             "sessions.get",
             "sessions.delete",
+            "sessions.patch",
             "chat.send",
             "chat.history",
           ],
@@ -226,6 +228,17 @@ async function onRequest(
 
   if (frame.method === "sessions.delete") {
     const result = handleSessionsDelete(frame.params);
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: result.ok,
+      ...(result.ok ? { payload: result.payload } : { error: result.error }),
+    });
+    return;
+  }
+
+  if (frame.method === "sessions.patch") {
+    const result = handleSessionsPatch(frame.params);
     sendRes(socket, {
       type: "res",
       id: frame.id,
