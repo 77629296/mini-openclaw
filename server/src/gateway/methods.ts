@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { broadcastEvent } from "./clients.js";
 import {
   appendMessage,
   createSession,
@@ -119,20 +121,35 @@ export function handleChatSend(params: unknown):
   const result = appendMessage(sessionId, { role, text });
   if (!result.ok) return result;
 
-  // stub model: only auto-reply when the client sent a user turn
-  let reply: unknown = null;
-  if (result.message.role === "user") {
-    const echoed = appendMessage(sessionId, {
-      role: "assistant",
-      text: `echo: ${result.message.text}`,
-    });
-    if (echoed.ok) reply = echoed.message;
-  }
-
+  // assistant reply is streamed by the connection layer
   return {
     ok: true,
-    payload: { sessionId, message: result.message, reply },
+    payload: { sessionId, message: result.message, reply: null },
   };
+}
+
+export async function streamStubReply(
+  sessionId: string,
+  userText: string,
+): Promise<unknown | null> {
+  const full = `echo: ${userText}`;
+  const runId = randomUUID();
+  const chunks = chunkText(full, 4);
+
+  for (const text of chunks) {
+    broadcastEvent({
+      type: "event",
+      event: "chat.delta",
+      payload: { sessionId, runId, text },
+    });
+    await sleep(40);
+  }
+
+  const echoed = appendMessage(sessionId, {
+    role: "assistant",
+    text: full,
+  });
+  return echoed.ok ? echoed.message : null;
 }
 
 export function handleChatHistory(params: unknown):
@@ -162,4 +179,16 @@ function readSessionId(params: unknown): string | null {
   if (!params || typeof params !== "object") return null;
   const id = (params as { sessionId?: unknown }).sessionId;
   return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
+function chunkText(text: string, size: number): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < text.length; i += size) {
+    out.push(text.slice(i, i + size));
+  }
+  return out.length ? out : [""];
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

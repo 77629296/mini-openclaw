@@ -24,11 +24,13 @@ export default function App() {
   const [lastTick, setLastTick] = useState<string | null>(null);
   const [lastChat, setLastChat] = useState<unknown>(null);
   const [lastSessionsEvent, setLastSessionsEvent] = useState<unknown>(null);
+  const [streamText, setStreamText] = useState("");
   const [title, setTitle] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [chatText, setChatText] = useState("");
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
+  const streamRunRef = useRef<string | null>(null);
 
   useEffect(() => {
     const client = new GatewayClient({ url: WS_URL });
@@ -61,10 +63,25 @@ export default function App() {
         });
         return;
       }
+      if (event === "chat.delta") {
+        const p = payload as { sessionId?: string; runId?: string; text?: string } | undefined;
+        if (!p?.sessionId || p.sessionId !== selectedIdRef.current) return;
+        if (typeof p.runId === "string" && p.runId !== streamRunRef.current) {
+          streamRunRef.current = p.runId;
+          setStreamText(typeof p.text === "string" ? p.text : "");
+          return;
+        }
+        if (typeof p.text === "string") {
+          setStreamText((prev) => prev + p.text);
+        }
+        return;
+      }
       if (event === "chat") {
         setLastChat(payload);
         const sessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
         if (sessionId && sessionId === selectedIdRef.current) {
+          streamRunRef.current = null;
+          setStreamText("");
           void client.request("chat.history", { sessionId }).then((res) => {
             setHistory(res.ok ? res.payload : res.error);
           });
@@ -291,6 +308,8 @@ export default function App() {
           </button>
         </div>
         <pre>{history ? JSON.stringify(history, null, 2) : "尚未调用"}</pre>
+        <h2>streaming</h2>
+        <pre>{streamText || "（空）"}</pre>
         <h2>last chat event</h2>
         <pre>{lastChat ? JSON.stringify(lastChat, null, 2) : "尚未收到"}</pre>
       </section>

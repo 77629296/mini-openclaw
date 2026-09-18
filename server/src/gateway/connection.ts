@@ -20,6 +20,7 @@ import {
   handleSessionsList,
   handleSessionsPatch,
   handleStatus,
+  streamStubReply,
 } from "./methods.js";
 
 const TICK_INTERVAL_MS = 15_000;
@@ -144,7 +145,7 @@ async function onRequest(
             "chat.send",
             "chat.history",
           ],
-          events: ["tick", "chat", "sessions"],
+          events: ["tick", "chat", "chat.delta", "sessions"],
         },
         snapshot: {
           uptimeMs: Math.floor(process.uptime() * 1000),
@@ -273,32 +274,51 @@ async function onRequest(
 
   if (frame.method === "chat.send") {
     const result = handleChatSend(frame.params);
-    sendRes(socket, {
-      type: "res",
-      id: frame.id,
-      ok: result.ok,
-      ...(result.ok ? { payload: result.payload } : { error: result.error }),
-    });
-    if (result.ok) {
-      broadcastEvent({
-        type: "event",
-        event: "chat",
-        payload: {
-          sessionId: result.payload.sessionId,
-          message: result.payload.message,
-        },
+    if (!result.ok) {
+      sendRes(socket, {
+        type: "res",
+        id: frame.id,
+        ok: false,
+        error: result.error,
       });
-      if (result.payload.reply) {
+      return;
+    }
+
+    broadcastEvent({
+      type: "event",
+      event: "chat",
+      payload: {
+        sessionId: result.payload.sessionId,
+        message: result.payload.message,
+      },
+    });
+
+    let reply: unknown = null;
+    const msg = result.payload.message as { role?: string; text?: string };
+    if (msg.role === "user" && typeof msg.text === "string") {
+      reply = await streamStubReply(result.payload.sessionId, msg.text);
+      if (reply) {
         broadcastEvent({
           type: "event",
           event: "chat",
           payload: {
             sessionId: result.payload.sessionId,
-            message: result.payload.reply,
+            message: reply,
           },
         });
       }
     }
+
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: true,
+      payload: {
+        sessionId: result.payload.sessionId,
+        message: result.payload.message,
+        reply,
+      },
+    });
     return;
   }
 
