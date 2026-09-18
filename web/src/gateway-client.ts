@@ -35,6 +35,7 @@ export type GatewayClientOptions = {
 };
 
 const MAX_RECONNECT_MS = 10_000;
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export class GatewayClient {
   private ws: WebSocket | null = null;
@@ -72,7 +73,23 @@ export class GatewayClient {
         reject(new Error("not connected"));
         return;
       }
-      this.pending.set(id, { resolve, reject });
+
+      const timer = setTimeout(() => {
+        if (!this.pending.has(id)) return;
+        this.pending.delete(id);
+        reject(new Error("request timeout"));
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pending.set(id, {
+        resolve: (res) => {
+          clearTimeout(timer);
+          resolve(res);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      });
       this.ws.send(JSON.stringify(frame));
     });
   }
