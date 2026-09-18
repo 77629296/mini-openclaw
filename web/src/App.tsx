@@ -36,7 +36,18 @@ export default function App() {
     const client = new GatewayClient({ url: WS_URL });
     clientRef.current = client;
     client.onStatus = setConnStatus;
-    client.onHello = setHello;
+    client.onHello = (payload) => {
+      setHello(payload);
+      void client.request("sessions.list").then((res) => {
+        if (!res.ok) {
+          setSessionError(res.error);
+          return;
+        }
+        const list = res.payload as { sessions?: SessionRow[] };
+        setSessions(list.sessions ?? []);
+        setSessionError(null);
+      });
+    };
     client.onEvent = (event, payload) => {
       if (event === "tick") {
         const ts = (payload as { ts?: number } | undefined)?.ts;
