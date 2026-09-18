@@ -144,7 +144,7 @@ async function onRequest(
             "chat.send",
             "chat.history",
           ],
-          events: ["tick", "chat"],
+          events: ["tick", "chat", "sessions"],
         },
         snapshot: {
           uptimeMs: Math.floor(process.uptime() * 1000),
@@ -199,11 +199,17 @@ async function onRequest(
   }
 
   if (frame.method === "sessions.create") {
+    const payload = handleSessionsCreate(frame.params);
     sendRes(socket, {
       type: "res",
       id: frame.id,
       ok: true,
-      payload: handleSessionsCreate(frame.params),
+      payload,
+    });
+    broadcastEvent({
+      type: "event",
+      event: "sessions",
+      payload: { action: "created", session: payload.session },
     });
     return;
   }
@@ -237,6 +243,13 @@ async function onRequest(
       ok: result.ok,
       ...(result.ok ? { payload: result.payload } : { error: result.error }),
     });
+    if (result.ok) {
+      broadcastEvent({
+        type: "event",
+        event: "sessions",
+        payload: { action: "deleted", id: result.payload.id },
+      });
+    }
     return;
   }
 
@@ -248,6 +261,13 @@ async function onRequest(
       ok: result.ok,
       ...(result.ok ? { payload: result.payload } : { error: result.error }),
     });
+    if (result.ok) {
+      broadcastEvent({
+        type: "event",
+        event: "sessions",
+        payload: { action: "updated", session: result.payload.session },
+      });
+    }
     return;
   }
 

@@ -23,6 +23,7 @@ export default function App() {
   const [sessionError, setSessionError] = useState<unknown>(null);
   const [lastTick, setLastTick] = useState<string | null>(null);
   const [lastChat, setLastChat] = useState<unknown>(null);
+  const [lastSessionsEvent, setLastSessionsEvent] = useState<unknown>(null);
   const [title, setTitle] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [chatText, setChatText] = useState("");
@@ -38,6 +39,26 @@ export default function App() {
       if (event === "tick") {
         const ts = (payload as { ts?: number } | undefined)?.ts;
         setLastTick(ts ? new Date(ts).toLocaleTimeString() : new Date().toLocaleTimeString());
+        return;
+      }
+      if (event === "sessions") {
+        setLastSessionsEvent(payload);
+        const action = (payload as { action?: string; id?: string } | undefined)?.action;
+        const deletedId = (payload as { id?: string } | undefined)?.id;
+        if (action === "deleted" && deletedId && deletedId === selectedIdRef.current) {
+          setSelectedId("");
+          setSessionDetail(null);
+          setHistory(null);
+        }
+        void client.request("sessions.list").then((res) => {
+          if (!res.ok) {
+            setSessionError(res.error);
+            return;
+          }
+          const list = res.payload as { sessions?: SessionRow[] };
+          setSessions(list.sessions ?? []);
+          setSessionError(null);
+        });
         return;
       }
       if (event === "chat") {
@@ -172,6 +193,7 @@ export default function App() {
         <p className="sub">状态：{connStatus}</p>
         <p className="sub">最近 tick：{lastTick ?? "还没有"}</p>
         <p className="sub">最近 chat event：{lastChat ? "已收到" : "还没有"}</p>
+        <p className="sub">最近 sessions event：{lastSessionsEvent ? "已收到" : "还没有"}</p>
       </header>
 
       <section>
