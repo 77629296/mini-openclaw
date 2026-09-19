@@ -11,6 +11,7 @@ import {
 } from "../protocol/types.js";
 import { addClient, broadcastEvent, removeClient } from "./clients.js";
 import {
+  handleChatAbort,
   handleChatHistory,
   handleChatSend,
   handleHealth,
@@ -144,6 +145,7 @@ async function onRequest(
             "sessions.patch",
             "chat.send",
             "chat.history",
+            "chat.abort",
           ],
           events: ["tick", "chat", "chat.delta", "sessions"],
         },
@@ -324,6 +326,17 @@ async function onRequest(
 
   if (frame.method === "chat.history") {
     const result = handleChatHistory(frame.params);
+    sendRes(socket, {
+      type: "res",
+      id: frame.id,
+      ok: result.ok,
+      ...(result.ok ? { payload: result.payload } : { error: result.error }),
+    });
+    return;
+  }
+
+  if (frame.method === "chat.abort") {
+    const result = handleChatAbort(frame.params);
     sendRes(socket, {
       type: "res",
       id: frame.id,

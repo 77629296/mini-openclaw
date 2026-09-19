@@ -211,6 +211,15 @@ export default function App() {
     await refreshSessions();
   }
 
+  async function abortChat() {
+    const client = clientRef.current;
+    if (!client || !selectedId) return;
+    const res = await client.request("chat.abort", { sessionId: selectedId });
+    if (!res.ok) {
+      setSessionError(res.error);
+    }
+  }
+
   const ready = connStatus === "ready";
 
   return (
@@ -313,6 +322,13 @@ export default function App() {
             disabled={!ready || !selectedId || !chatText.trim()}
           >
             send
+          </button>
+          <button
+            type="button"
+            onClick={() => void abortChat()}
+            disabled={!ready || !selectedId || !streamText}
+          >
+            abort
           </button>
           <button type="button" onClick={() => void loadHistory()} disabled={!ready || !selectedId}>
             history

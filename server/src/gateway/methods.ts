@@ -128,28 +128,77 @@ export function handleChatSend(params: unknown):
   };
 }
 
+type ActiveRun = { sessionId: string; aborted: boolean };
+
+const runsById = new Map<string, ActiveRun>();
+const runBySession = new Map<string, string>();
+
+export function handleChatAbort(params: unknown):
+  | { ok: true; payload: { runId: string; sessionId: string; aborted: true } }
+  | { ok: false; error: { code: string; message: string } } {
+  if (!params || typeof params !== "object") {
+    return { ok: false, error: { code: "INVALID_REQUEST", message: "params required" } };
+  }
+  const p = params as { runId?: unknown; sessionId?: unknown };
+  let runId = typeof p.runId === "string" ? p.runId.trim() : "";
+  if (!runId) {
+    const sessionId = typeof p.sessionId === "string" ? p.sessionId.trim() : "";
+    if (!sessionId) {
+      return {
+        ok: false,
+        error: { code: "INVALID_REQUEST", message: "runId or sessionId required" },
+      };
+    }
+    runId = runBySession.get(sessionId) ?? "";
+  }
+  const run = runId ? runsById.get(runId) : undefined;
+  if (!run) {
+    return { ok: false, error: { code: "NOT_FOUND", message: "no active run" } };
+  }
+  run.aborted = true;
+  return { ok: true, payload: { runId, sessionId: run.sessionId, aborted: true } };
+}
+
 export async function streamStubReply(
   sessionId: string,
   userText: string,
 ): Promise<unknown | null> {
   const full = `echo: ${userText}`;
   const runId = randomUUID();
-  const chunks = chunkText(full, 4);
+  const run: ActiveRun = { sessionId, aborted: false };
+  runsById.set(runId, run);
+  runBySession.set(sessionId, runId);
 
-  for (const text of chunks) {
-    broadcastEvent({
-      type: "event",
-      event: "chat.delta",
-      payload: { sessionId, runId, text },
+  try {
+    const chunks = chunkText(full, 4);
+    for (const text of chunks) {
+      if (run.aborted) break;
+      broadcastEvent({
+        type: "event",
+        event: "chat.delta",
+        payload: { sessionId, runId, text },
+      });
+      await sleep(40);
+    }
+
+    if (run.aborted) {
+      broadcastEvent({
+        type: "event",
+        event: "chat",
+        payload: { sessionId, runId, aborted: true },
+      });
+      return null;
+    }
+
+    const echoed = appendMessage(sessionId, {
+      role: "assistant",
+      text: full,
     });
-    await sleep(40);
+    return echoed.ok ? echoed.message : null;
+  } finally {
+    if (runBySession.get(sessionId) === runId) runBySession.delete(sessionId);
+    runsById.delete(runId);
   }
-
-  const echoed = appendMessage(sessionId, {
-    role: "assistant",
-    text: full,
-  });
-  return echoed.ok ? echoed.message : null;
 }
 
 export function handleChatHistory(params: unknown):
