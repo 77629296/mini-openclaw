@@ -128,7 +128,7 @@ export function handleChatSend(params: unknown):
   };
 }
 
-type ActiveRun = { sessionId: string; aborted: boolean };
+type ActiveRun = { sessionId: string; aborted: boolean; parts: string[] };
 
 const runsById = new Map<string, ActiveRun>();
 const runBySession = new Map<string, string>();
@@ -165,7 +165,7 @@ export async function streamStubReply(
 ): Promise<unknown | null> {
   const full = `echo: ${userText}`;
   const runId = randomUUID();
-  const run: ActiveRun = { sessionId, aborted: false };
+  const run: ActiveRun = { sessionId, aborted: false, parts: [] };
   runsById.set(runId, run);
   runBySession.set(sessionId, runId);
 
@@ -173,6 +173,7 @@ export async function streamStubReply(
     const chunks = chunkText(full, 4);
     for (const text of chunks) {
       if (run.aborted) break;
+      run.parts.push(text);
       broadcastEvent({
         type: "event",
         event: "chat.delta",
@@ -182,12 +183,20 @@ export async function streamStubReply(
     }
 
     if (run.aborted) {
-      broadcastEvent({
-        type: "event",
-        event: "chat",
-        payload: { sessionId, runId, aborted: true },
+      const partial = run.parts.join("");
+      if (!partial) {
+        broadcastEvent({
+          type: "event",
+          event: "chat",
+          payload: { sessionId, runId, aborted: true },
+        });
+        return null;
+      }
+      const saved = appendMessage(sessionId, {
+        role: "assistant",
+        text: partial,
       });
-      return null;
+      return saved.ok ? saved.message : null;
     }
 
     const echoed = appendMessage(sessionId, {
