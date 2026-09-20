@@ -107,6 +107,21 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const client = clientRef.current;
+    streamRunRef.current = null;
+    setStreamText("");
+    setSessionDetail(null);
+    if (!selectedId || !client || connStatus !== "ready") {
+      setHistory(null);
+      return;
+    }
+    void client.request("chat.history", { sessionId: selectedId }).then((res) => {
+      if (selectedIdRef.current !== selectedId) return;
+      setHistory(res.ok ? res.payload : res.error);
+    });
+  }, [selectedId, connStatus]);
+
   async function call(method: "health" | "status") {
     const client = clientRef.current;
     if (!client) return;
