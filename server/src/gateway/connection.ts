@@ -21,7 +21,7 @@ import {
   handleSessionsList,
   handleSessionsPatch,
   handleStatus,
-  streamStubReply,
+  startStubReply,
 } from "./methods.js";
 
 const TICK_INTERVAL_MS = 15_000;
@@ -295,20 +295,11 @@ async function onRequest(
       },
     });
 
-    let reply: unknown = null;
+    let runId: string | undefined;
     const msg = result.payload.message as { role?: string; text?: string };
     if (msg.role === "user" && typeof msg.text === "string") {
-      reply = await streamStubReply(result.payload.sessionId, msg.text);
-      if (reply) {
-        broadcastEvent({
-          type: "event",
-          event: "chat",
-          payload: {
-            sessionId: result.payload.sessionId,
-            message: reply,
-          },
-        });
-      }
+      // ack first; stub reply streams via chat.delta / chat events
+      runId = startStubReply(result.payload.sessionId, msg.text);
     }
 
     sendRes(socket, {
@@ -318,7 +309,8 @@ async function onRequest(
       payload: {
         sessionId: result.payload.sessionId,
         message: result.payload.message,
-        reply,
+        runId: runId ?? null,
+        reply: null,
       },
     });
     return;

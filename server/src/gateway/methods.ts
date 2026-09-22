@@ -159,15 +159,23 @@ export function handleChatAbort(params: unknown):
   return { ok: true, payload: { runId, sessionId: run.sessionId, aborted: true } };
 }
 
-export async function streamStubReply(
-  sessionId: string,
-  userText: string,
-): Promise<unknown | null> {
-  const full = `echo: ${userText}`;
+/** Register a run and return runId immediately; deltas + final chat ride events. */
+export function startStubReply(sessionId: string, userText: string): string {
   const runId = randomUUID();
   const run: ActiveRun = { sessionId, aborted: false, parts: [] };
   runsById.set(runId, run);
   runBySession.set(sessionId, runId);
+  void runStubReply(runId, run, userText);
+  return runId;
+}
+
+async function runStubReply(
+  runId: string,
+  run: ActiveRun,
+  userText: string,
+): Promise<void> {
+  const { sessionId } = run;
+  const full = `echo: ${userText}`;
 
   try {
     const chunks = chunkText(full, 4);
@@ -190,20 +198,33 @@ export async function streamStubReply(
           event: "chat",
           payload: { sessionId, runId, aborted: true },
         });
-        return null;
+        return;
       }
       const saved = appendMessage(sessionId, {
         role: "assistant",
         text: partial,
       });
-      return saved.ok ? saved.message : null;
+      if (saved.ok) {
+        broadcastEvent({
+          type: "event",
+          event: "chat",
+          payload: { sessionId, runId, message: saved.message },
+        });
+      }
+      return;
     }
 
     const echoed = appendMessage(sessionId, {
       role: "assistant",
       text: full,
     });
-    return echoed.ok ? echoed.message : null;
+    if (echoed.ok) {
+      broadcastEvent({
+        type: "event",
+        event: "chat",
+        payload: { sessionId, runId, message: echoed.message },
+      });
+    }
   } finally {
     if (runBySession.get(sessionId) === runId) runBySession.delete(sessionId);
     runsById.delete(runId);
