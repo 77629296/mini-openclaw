@@ -25,6 +25,7 @@ export default function App() {
   const [lastChat, setLastChat] = useState<unknown>(null);
   const [lastSessionsEvent, setLastSessionsEvent] = useState<unknown>(null);
   const [streamText, setStreamText] = useState("");
+  const [activeRun, setActiveRun] = useState<{ sessionId: string; runId: string } | null>(null);
   const [title, setTitle] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [chatText, setChatText] = useState("");
@@ -89,7 +90,13 @@ export default function App() {
       }
       if (event === "chat") {
         setLastChat(payload);
-        const sessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
+        const p = payload as {
+          sessionId?: string;
+          runId?: string;
+          aborted?: boolean;
+          message?: { role?: string };
+        } | undefined;
+        const sessionId = p?.sessionId;
         if (sessionId && sessionId === selectedIdRef.current) {
           streamRunRef.current = null;
           setStreamText("");
@@ -97,6 +104,14 @@ export default function App() {
             setHistory(res.ok ? res.payload : res.error);
           });
         }
+        setActiveRun((prev) => {
+          if (!prev) return null;
+          if (p?.runId && p.runId === prev.runId) return null;
+          if (sessionId === prev.sessionId && (p?.aborted || p?.message?.role === "assistant")) {
+            return null;
+          }
+          return prev;
+        });
       }
     };
     client.connect();
@@ -212,6 +227,7 @@ export default function App() {
   async function sendChat() {
     const client = clientRef.current;
     if (!client || !selectedId || !chatText.trim()) return;
+    if (activeRun?.sessionId === selectedId) return;
     const res = await client.request("chat.send", {
       sessionId: selectedId,
       role: "user",
@@ -221,6 +237,12 @@ export default function App() {
       setHistory(res.error);
       return;
     }
+    const payload = res.payload as { runId?: string | null } | undefined;
+    if (typeof payload?.runId === "string") {
+      streamRunRef.current = payload.runId;
+      setActiveRun({ sessionId: selectedId, runId: payload.runId });
+      setStreamText("");
+    }
     setChatText("");
     await loadHistory();
     await refreshSessions();
@@ -229,13 +251,18 @@ export default function App() {
   async function abortChat() {
     const client = clientRef.current;
     if (!client || !selectedId) return;
-    const res = await client.request("chat.abort", { sessionId: selectedId });
+    const params =
+      activeRun?.sessionId === selectedId
+        ? { runId: activeRun.runId }
+        : { sessionId: selectedId };
+    const res = await client.request("chat.abort", params);
     if (!res.ok) {
       setSessionError(res.error);
     }
   }
 
   const ready = connStatus === "ready";
+  const sessionBusy = Boolean(activeRun && activeRun.sessionId === selectedId);
 
   return (
     <main className="page">
@@ -329,19 +356,19 @@ export default function App() {
             value={chatText}
             onChange={(e) => setChatText(e.target.value)}
             placeholder="message text"
-            disabled={!ready || !selectedId}
+            disabled={!ready || !selectedId || sessionBusy}
           />
           <button
             type="button"
             onClick={() => void sendChat()}
-            disabled={!ready || !selectedId || !chatText.trim()}
+            disabled={!ready || !selectedId || !chatText.trim() || sessionBusy}
           >
             send
           </button>
           <button
             type="button"
             onClick={() => void abortChat()}
-            disabled={!ready || !selectedId || !streamText}
+            disabled={!ready || !selectedId || !sessionBusy}
           >
             abort
           </button>

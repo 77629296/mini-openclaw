@@ -133,6 +133,10 @@ type ActiveRun = { sessionId: string; aborted: boolean; parts: string[] };
 const runsById = new Map<string, ActiveRun>();
 const runBySession = new Map<string, string>();
 
+export function hasActiveRun(sessionId: string): boolean {
+  return runBySession.has(sessionId);
+}
+
 export function handleChatAbort(params: unknown):
   | { ok: true; payload: { runId: string; sessionId: string; aborted: true } }
   | { ok: false; error: { code: string; message: string } } {
@@ -160,13 +164,24 @@ export function handleChatAbort(params: unknown):
 }
 
 /** Register a run and return runId immediately; deltas + final chat ride events. */
-export function startStubReply(sessionId: string, userText: string): string {
+export function startStubReply(
+  sessionId: string,
+  userText: string,
+):
+  | { ok: true; runId: string }
+  | { ok: false; error: { code: string; message: string } } {
+  if (runBySession.has(sessionId)) {
+    return {
+      ok: false,
+      error: { code: "BUSY", message: "session already has an active run" },
+    };
+  }
   const runId = randomUUID();
   const run: ActiveRun = { sessionId, aborted: false, parts: [] };
   runsById.set(runId, run);
   runBySession.set(sessionId, runId);
   void runStubReply(runId, run, userText);
-  return runId;
+  return { ok: true, runId };
 }
 
 async function runStubReply(

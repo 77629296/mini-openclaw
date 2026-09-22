@@ -21,6 +21,7 @@ import {
   handleSessionsList,
   handleSessionsPatch,
   handleStatus,
+  hasActiveRun,
   startStubReply,
 } from "./methods.js";
 
@@ -275,6 +276,23 @@ async function onRequest(
   }
 
   if (frame.method === "chat.send") {
+    // reject before persist — otherwise a BUSY reply would orphan the user message
+    if (frame.params && typeof frame.params === "object") {
+      const p = frame.params as { sessionId?: unknown; role?: unknown; text?: unknown };
+      const sessionId = typeof p.sessionId === "string" ? p.sessionId.trim() : "";
+      const role = typeof p.role === "string" ? p.role : "user";
+      const willStream = role === "user" && typeof p.text === "string";
+      if (sessionId && willStream && hasActiveRun(sessionId)) {
+        sendRes(socket, {
+          type: "res",
+          id: frame.id,
+          ok: false,
+          error: { code: "BUSY", message: "session already has an active run" },
+        });
+        return;
+      }
+    }
+
     const result = handleChatSend(frame.params);
     if (!result.ok) {
       sendRes(socket, {
@@ -295,11 +313,21 @@ async function onRequest(
       },
     });
 
-    let runId: string | undefined;
+    let runId: string | null = null;
     const msg = result.payload.message as { role?: string; text?: string };
     if (msg.role === "user" && typeof msg.text === "string") {
       // ack first; stub reply streams via chat.delta / chat events
-      runId = startStubReply(result.payload.sessionId, msg.text);
+      const started = startStubReply(result.payload.sessionId, msg.text);
+      if (!started.ok) {
+        sendRes(socket, {
+          type: "res",
+          id: frame.id,
+          ok: false,
+          error: started.error,
+        });
+        return;
+      }
+      runId = started.runId;
     }
 
     sendRes(socket, {
@@ -309,7 +337,7 @@ async function onRequest(
       payload: {
         sessionId: result.payload.sessionId,
         message: result.payload.message,
-        runId: runId ?? null,
+        runId,
         reply: null,
       },
     });
