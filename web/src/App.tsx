@@ -11,6 +11,20 @@ type SessionRow = {
   updatedAt: number;
 };
 
+type ChatMessage = {
+  id?: string;
+  role?: string;
+  text?: string;
+  ts?: number;
+};
+
+function readMessages(history: unknown): ChatMessage[] | null {
+  if (!history || typeof history !== "object") return null;
+  if ("code" in history && "message" in history) return null;
+  const messages = (history as { messages?: unknown }).messages;
+  return Array.isArray(messages) ? (messages as ChatMessage[]) : null;
+}
+
 export default function App() {
   const clientRef = useRef<GatewayClient | null>(null);
   const [connStatus, setConnStatus] = useState("idle");
@@ -263,6 +277,7 @@ export default function App() {
 
   const ready = connStatus === "ready";
   const sessionBusy = Boolean(activeRun && activeRun.sessionId === selectedId);
+  const messages = readMessages(history);
 
   return (
     <main className="page">
@@ -376,9 +391,27 @@ export default function App() {
             history
           </button>
         </div>
-        <pre>{history ? JSON.stringify(history, null, 2) : "尚未调用"}</pre>
-        <h2>streaming</h2>
-        <pre>{streamText || "（空）"}</pre>
+        {messages ? (
+          <div className="thread">
+            {messages.length === 0 && !streamText ? (
+              <p className="thread-empty">还没有消息</p>
+            ) : null}
+            {messages.map((m, i) => (
+              <div key={m.id ?? `${m.role}-${m.ts ?? i}`} className={`msg msg-${m.role ?? "unknown"}`}>
+                <span className="msg-role">{m.role ?? "?"}</span>
+                <p className="msg-text">{m.text ?? ""}</p>
+              </div>
+            ))}
+            {streamText ? (
+              <div className="msg msg-assistant msg-streaming">
+                <span className="msg-role">assistant</span>
+                <p className="msg-text">{streamText}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <pre>{history ? JSON.stringify(history, null, 2) : "尚未调用"}</pre>
+        )}
         <h2>last chat event</h2>
         <pre>{lastChat ? JSON.stringify(lastChat, null, 2) : "尚未收到"}</pre>
       </section>

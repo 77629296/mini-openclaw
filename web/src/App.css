@@ -78,3 +78,52 @@ button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fffdf8;
+  border: 1px solid #e7e0d5;
+  border-radius: 8px;
+  min-height: 48px;
+}
+
+.thread-empty {
+  margin: 0;
+  color: #78716c;
+  font-size: 13px;
+}
+
+.msg {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.msg-role {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #78716c;
+  padding-top: 2px;
+}
+
+.msg-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1c1917;
+}
+
+.msg-user .msg-role {
+  color: #1c1917;
+}
+
+.msg-streaming .msg-text {
+  color: #57534e;
+}
