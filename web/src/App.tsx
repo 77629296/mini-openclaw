@@ -334,18 +334,6 @@ export default function App() {
           </button>
         </div>
         <div className="actions">
-          <select
-            value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-            disabled={!ready || sessions.length === 0}
-          >
-            <option value="">select session</option>
-            {sessions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title} ({s.id.slice(0, 8)})
-              </option>
-            ))}
-          </select>
           <button type="button" onClick={() => void getSession()} disabled={!ready || !selectedId}>
             get
           </button>
@@ -353,13 +341,30 @@ export default function App() {
             delete
           </button>
         </div>
-        <pre>
-          {sessionError
-            ? JSON.stringify(sessionError, null, 2)
-            : sessions.length
-              ? JSON.stringify({ sessions }, null, 2)
-              : "尚未调用"}
-        </pre>
+        {sessionError ? (
+          <pre>{JSON.stringify(sessionError, null, 2)}</pre>
+        ) : (
+          <div className="session-list">
+            {sessions.length === 0 ? (
+              <p className="thread-empty">还没有 session</p>
+            ) : (
+              sessions.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`session-row${s.id === selectedId ? " session-row-active" : ""}`}
+                  onClick={() => setSelectedId(s.id)}
+                  disabled={!ready}
+                >
+                  <span className="session-title">{s.title}</span>
+                  <span className="session-meta">
+                    {s.id.slice(0, 8)} · {new Date(s.updatedAt).toLocaleString()}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
         <h2>session detail</h2>
         <pre>{sessionDetail ? JSON.stringify(sessionDetail, null, 2) : "尚未调用"}</pre>
       </section>
