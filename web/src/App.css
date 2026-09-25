@@ -88,6 +88,8 @@ button:disabled {
   border: 1px solid #e7e0d5;
   border-radius: 8px;
   min-height: 48px;
+  max-height: 360px;
+  overflow-y: auto;
 }
 
 .thread-empty {
@@ -98,9 +100,15 @@ button:disabled {
 
 .msg {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 88px 1fr;
   gap: 10px;
   align-items: start;
+}
+
+.msg-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .msg-role {
@@ -109,6 +117,11 @@ button:disabled {
   text-transform: uppercase;
   color: #78716c;
   padding-top: 2px;
+}
+
+.msg-time {
+  font-size: 11px;
+  color: #a8a29e;
 }
 
 .msg-text {

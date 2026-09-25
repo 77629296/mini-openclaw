@@ -46,6 +46,7 @@ export default function App() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   const streamRunRef = useRef<string | null>(null);
+  const threadEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const client = new GatewayClient({ url: WS_URL });
@@ -150,6 +151,12 @@ export default function App() {
       setHistory(res.ok ? res.payload : res.error);
     });
   }, [selectedId, connStatus]);
+
+  const messages = readMessages(history);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, streamText, selectedId]);
 
   async function call(method: "health" | "status") {
     const client = clientRef.current;
@@ -277,7 +284,6 @@ export default function App() {
 
   const ready = connStatus === "ready";
   const sessionBusy = Boolean(activeRun && activeRun.sessionId === selectedId);
-  const messages = readMessages(history);
 
   return (
     <main className="page">
@@ -375,6 +381,12 @@ export default function App() {
           <input
             value={chatText}
             onChange={(e) => setChatText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void sendChat();
+              }
+            }}
             placeholder="message text"
             disabled={!ready || !selectedId || sessionBusy}
           />
@@ -403,16 +415,24 @@ export default function App() {
             ) : null}
             {messages.map((m, i) => (
               <div key={m.id ?? `${m.role}-${m.ts ?? i}`} className={`msg msg-${m.role ?? "unknown"}`}>
-                <span className="msg-role">{m.role ?? "?"}</span>
+                <div className="msg-meta">
+                  <span className="msg-role">{m.role ?? "?"}</span>
+                  {typeof m.ts === "number" ? (
+                    <span className="msg-time">{new Date(m.ts).toLocaleTimeString()}</span>
+                  ) : null}
+                </div>
                 <p className="msg-text">{m.text ?? ""}</p>
               </div>
             ))}
             {streamText ? (
               <div className="msg msg-assistant msg-streaming">
-                <span className="msg-role">assistant</span>
+                <div className="msg-meta">
+                  <span className="msg-role">assistant</span>
+                </div>
                 <p className="msg-text">{streamText}</p>
               </div>
             ) : null}
+            <div ref={threadEndRef} />
           </div>
         ) : (
           <pre>{history ? JSON.stringify(history, null, 2) : "尚未调用"}</pre>
